@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -13,10 +13,10 @@ import {
   VolumeX,
   Search,
   ChevronRight,
+  ChevronLeft,
+  ChevronDown,
   FileText,
-  HelpCircle,
   Star,
-  Compass,
   Clock,
   ArrowRight,
   Check,
@@ -24,7 +24,10 @@ import {
   X,
   Trophy,
   Book,
-  FileCheck,
+  RotateCcw,
+  MessageCircle,
+  Lightbulb,
+  ListTree,
 } from 'lucide-react';
 import { api, apiErrorBody } from '../lib/api';
 import { RichContent } from '../components/RichContent';
@@ -88,7 +91,7 @@ interface TopicItem {
   sortOrder?: number;
   lessons: LessonSummary[];
   assessments: AssessmentSummary[];
-  flashcards: { id: number }[];
+  flashcards: { id: number; front?: string; back?: string }[];
   fileAssets?: { id: number; kind: string; label: string | null; originalName: string; url: string | null }[];
   masteries?: { state: string; accuracy: number | null }[];
 }
@@ -140,26 +143,38 @@ interface KidsModeSettings {
   lockedUntil: string | null;
 }
 
-type KidsHubTab = 'today' | 'subjects' | 'reading' | 'quizzes' | 'flashcards' | 'tutor' | 'badges';
+type MainViewMode = 'book' | 'today' | 'trophies';
 
 export default function KidsHomePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  // Navigation State
-  const [activeTab, setActiveTab] = useState<KidsHubTab>('today');
-  const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(null);
-  const [selectedTopicDetail, setSelectedTopicDetail] = useState<TopicItem | null>(null);
-  const [readingTopic, setReadingTopic] = useState<{ id: number; title: string; content: string; subjectName?: string; subjectColor?: string } | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedSubjectFilter, setSelectedSubjectFilter] = useState<number | 'all'>('all');
+  // Top view mode: 'book' (Interactive Storybook & Knowledge Doc), 'today' (Daily Mission Central), 'trophies' (Achievements)
+  const [viewMode, setViewMode] = useState<MainViewMode>('book');
+
+  // Book Reader Navigation State
+  const [selectedTopicId, setSelectedTopicId] = useState<number | null>(null);
+  const [tocSearch, setTocSearch] = useState('');
+  const [expandedUnits, setExpandedUnits] = useState<Record<number, boolean>>({});
+  const [fontSize, setFontSize] = useState<'normal' | 'large' | 'huge'>('large');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isCompanionOpen, setIsCompanionOpen] = useState(true);
+
+  // Audio Speech Reader State
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [speechRate, setSpeechRate] = useState<number>(1.0);
+  const speechRef = useRef<SpeechSynthesisUtterance | null>(null);
+
+  // Interactive Inline Flashcard Deck State
+  const [activeCardIndex, setActiveCardIndex] = useState(0);
+  const [isCardFlipped, setIsCardFlipped] = useState(false);
 
   // Exit PIN Flow
   const [exiting, setExiting] = useState(false);
   const [pin, setPin] = useState('');
   const [exitError, setExitError] = useState<string | null>(null);
 
-  // Fetch Full Kids Overview Data (Single unified request for instant speed)
+  // Fetch unified overview
   const overviewQuery = useQuery({
     queryKey: ['kids-overview'],
     queryFn: async () => {
@@ -200,72 +215,144 @@ export default function KidsHomePage() {
 
   const overview = overviewQuery.data;
   const child = overview?.child;
-  const gamification = overview?.gamification ?? { totalPoints: 0, level: 1, currentStreakDays: 0, longestStreakDays: 0, gamificationEnabled: true };
+  const gamification = overview?.gamification ?? {
+    totalPoints: 0,
+    level: 1,
+    currentStreakDays: 0,
+    longestStreakDays: 0,
+    gamificationEnabled: true,
+  };
   const subjects = useMemo(() => overview?.subjects ?? [], [overview?.subjects]);
-  const todaySessions = overview?.todaySessions ?? [];
+  const todaySessions = useMemo(() => overview?.todaySessions ?? [], [overview?.todaySessions]);
   const reviewQueueCount = overview?.reviewQueueCount ?? 0;
   const achievements = overview?.achievements ?? [];
 
-  // Flattened Topics with Reading Content
-  const allReadingTopics = useMemo(() => {
-    const list: {
+  // Linear list of all chapters (topics) across all subjects and units for sequential book flow
+  const allBookChapters = useMemo(() => {
+    const chapters: {
       topic: TopicItem;
-      unitName: string;
-      subjectName: string;
-      subjectColor: string;
+      unit: UnitItem;
+      subject: SubjectItem;
+      chapterIndex: number;
     }[] = [];
 
+    let idx = 1;
     subjects.forEach((subj) => {
       subj.units.forEach((unit) => {
         unit.topics.forEach((topic) => {
-          if (topic.learningContent && topic.learningContent.trim().length > 0) {
-            list.push({
-              topic,
-              unitName: unit.name,
-              subjectName: subj.name,
-              subjectColor: subj.color || '#7928CA',
-            });
-          }
-        });
-      });
-    });
-    return list;
-  }, [subjects]);
-
-  // Flattened Assessments / Quizzes
-  const allQuizzes = useMemo(() => {
-    const list: {
-      assessment: AssessmentSummary;
-      topicTitle: string;
-      subjectName: string;
-      subjectColor: string;
-    }[] = [];
-
-    subjects.forEach((subj) => {
-      subj.units.forEach((unit) => {
-        unit.topics.forEach((topic) => {
-          topic.assessments.forEach((assessment) => {
-            list.push({
-              assessment,
-              topicTitle: topic.title,
-              subjectName: subj.name,
-              subjectColor: subj.color || '#7928CA',
-            });
+          chapters.push({
+            topic,
+            unit,
+            subject: subj,
+            chapterIndex: idx++,
           });
         });
       });
     });
-    return list;
+    return chapters;
   }, [subjects]);
 
-  // Filtered reading items based on search & subject filter
-  const filteredReading = useMemo(() => {
-    return allReadingTopics.filter((item) => {
-      const matchSubject = selectedSubjectFilter === 'all' || item.subjectName === subjects.find((s) => s.id === selectedSubjectFilter)?.name;
-      const matchSearch = searchQuery === '' || item.topic.title.toLowerCase().includes(searchQuery.toLowerCase()) || item.unitName.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchSubject && matchSearch;
-    });
-  }, [allReadingTopics, selectedSubjectFilter, searchQuery, subjects]);
+  // Set default active topic when subjects load
+  useEffect(() => {
+    if (allBookChapters.length > 0 && selectedTopicId === null) {
+      // Prioritize today's first incomplete scheduled session topic if present
+      const scheduledTopicId = todaySessions.find((s) => s.status !== 'done')?.topic.id;
+      if (scheduledTopicId) {
+        setSelectedTopicId(scheduledTopicId);
+        const match = allBookChapters.find((c) => c.topic.id === scheduledTopicId);
+        if (match) {
+          setExpandedUnits((prev) => ({ ...prev, [match.unit.id]: true }));
+        }
+      } else {
+        setSelectedTopicId(allBookChapters[0].topic.id);
+        setExpandedUnits((prev) => ({ ...prev, [allBookChapters[0].unit.id]: true }));
+      }
+    }
+  }, [allBookChapters, selectedTopicId, todaySessions]);
+
+  // Active current topic, unit, and subject in the book reader
+  const currentChapter = useMemo(() => {
+    return allBookChapters.find((c) => c.topic.id === selectedTopicId) || allBookChapters[0] || null;
+  }, [allBookChapters, selectedTopicId]);
+
+  // Previous and Next chapter pointers for seamless, flowing reading
+  const { prevChapter, nextChapter } = useMemo(() => {
+    if (!currentChapter) return { prevChapter: null, nextChapter: null };
+    const currentIndex = allBookChapters.findIndex((c) => c.topic.id === currentChapter.topic.id);
+    return {
+      prevChapter: currentIndex > 0 ? allBookChapters[currentIndex - 1] : null,
+      nextChapter: currentIndex < allBookChapters.length - 1 ? allBookChapters[currentIndex + 1] : null,
+    };
+  }, [allBookChapters, currentChapter]);
+
+  // Reset flashcard state when topic changes
+  useEffect(() => {
+    setActiveCardIndex(0);
+    setIsCardFlipped(false);
+    // Stop audio narration when changing topics
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      setIsPlayingAudio(false);
+    }
+  }, [selectedTopicId]);
+
+  // Audio Speech Narration handler
+  const handleToggleAudio = () => {
+    if (!('speechSynthesis' in window)) {
+      alert('Text-to-speech audio is not supported in this browser.');
+      return;
+    }
+
+    if (isPlayingAudio) {
+      window.speechSynthesis.cancel();
+      setIsPlayingAudio(false);
+      return;
+    }
+
+    if (!currentChapter?.topic.learningContent) return;
+
+    // Strip HTML tags for clean narration
+    const plainText = `${currentChapter.topic.title}. ${currentChapter.topic.learningContent.replace(/<[^>]*>?/gm, ' ')}`;
+    const utterance = new SpeechSynthesisUtterance(plainText);
+    utterance.rate = speechRate;
+    utterance.pitch = 1.05; // Slightly friendly, warmer tone for kids
+
+    utterance.onend = () => {
+      setIsPlayingAudio(false);
+    };
+    utterance.onerror = () => {
+      setIsPlayingAudio(false);
+    };
+
+    speechRef.current = utterance;
+    window.speechSynthesis.speak(utterance);
+    setIsPlayingAudio(true);
+  };
+
+  const handleRateChange = (newRate: number) => {
+    setSpeechRate(newRate);
+    if (isPlayingAudio && speechRef.current) {
+      window.speechSynthesis.cancel();
+      setIsPlayingAudio(false);
+      setTimeout(() => {
+        handleToggleAudio();
+      }, 100);
+    }
+  };
+
+  const toggleUnitAccordion = (unitId: number) => {
+    setExpandedUnits((prev) => ({
+      ...prev,
+      [unitId]: !prev[unitId],
+    }));
+  };
+
+  const handleSelectChapter = (topicId: number, unitId: number) => {
+    setSelectedTopicId(topicId);
+    setExpandedUnits((prev) => ({ ...prev, [unitId]: true }));
+    // Auto scroll reader to top
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   if (overviewQuery.isError) {
     return (
@@ -291,177 +378,145 @@ export default function KidsHomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50/60 pb-16 font-sans antialiased text-slate-800">
+    <div className="min-h-screen bg-slate-50/60 font-sans antialiased text-slate-800 flex flex-col">
       {/* ========================================================================= */}
-      {/* TOP KIDS BANNER & GAMIFICATION BAR                                        */}
+      {/* TOP UNIFIED KIDS APP BAR & GAMIFICATION HUD                               */}
       {/* ========================================================================= */}
-      <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/90 backdrop-blur-md shadow-soft-xs">
-        <div className="w-full px-4 sm:px-6 lg:px-8">
-          <div className="flex h-18 items-center justify-between gap-4">
-            {/* Left: Avatar & Child Greeting */}
-            <div className="flex items-center gap-3.5">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-purple-600 via-pink-500 to-amber-400 text-white font-extrabold text-lg shadow-soft-sm ring-2 ring-purple-100">
+      <header className="sticky top-0 z-40 border-b border-slate-200/90 bg-white/95 backdrop-blur-md shadow-soft-xs">
+        <div className="w-full px-4 sm:px-6">
+          <div className="flex h-16 items-center justify-between gap-4">
+            {/* Left: Child Identity & Mode Switcher */}
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-tr from-purple-600 via-pink-500 to-amber-400 text-white font-black text-base shadow-soft-xs ring-2 ring-purple-100">
                 {child?.name ? child.name.charAt(0).toUpperCase() : '🌟'}
               </div>
-              <div>
+
+              <div className="hidden sm:block">
                 <div className="flex items-center gap-2">
-                  <h1 className="text-base font-extrabold text-slate-900 tracking-tight">
-                    Hey, {child?.name || 'Explorer'}! 👋
+                  <h1 className="text-sm font-black text-slate-900 tracking-tight">
+                    {child?.name ? `${child.name}'s Learning Book` : "Explorer's Hub"}
                   </h1>
-                  <span className="rounded-full bg-purple-100 px-2.5 py-0.5 text-[10px] font-extrabold text-purple-700 uppercase tracking-wider">
-                    {child?.grade ? `${child.grade}` : 'Student'}
+                  <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-extrabold text-purple-700 uppercase">
+                    {child?.grade || 'Grade Student'}
                   </span>
                 </div>
-                <p className="text-[11px] font-semibold text-slate-400">
-                  Ready to conquer today's learning quest?
-                </p>
+              </div>
+
+              {/* View Selector Tabs */}
+              <div className="flex items-center gap-1 rounded-2xl bg-slate-100 p-1 ml-2">
+                <button
+                  onClick={() => setViewMode('book')}
+                  className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
+                    viewMode === 'book'
+                      ? 'bg-white text-purple-700 shadow-soft-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <BookOpen className="h-3.5 w-3.5" />
+                  <span>Storybook</span>
+                </button>
+
+                <button
+                  onClick={() => setViewMode('today')}
+                  className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
+                    viewMode === 'today'
+                      ? 'bg-white text-purple-700 shadow-soft-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span>Today's Quests</span>
+                  {todaySessions.filter((s) => s.status !== 'done').length > 0 && (
+                    <span className="rounded-full bg-purple-600 px-1.5 py-0.2 text-[9px] font-black text-white">
+                      {todaySessions.filter((s) => s.status !== 'done').length}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  onClick={() => setViewMode('trophies')}
+                  className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
+                    viewMode === 'trophies'
+                      ? 'bg-white text-purple-700 shadow-soft-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Trophy className="h-3.5 w-3.5" />
+                  <span>Trophies</span>
+                </button>
               </div>
             </div>
 
-            {/* Middle: Gamification Badges & Streak Counters */}
-            <div className="hidden md:flex items-center gap-3">
-              {/* Level Badge */}
-              <div className="flex items-center gap-2 rounded-2xl border border-purple-100 bg-purple-50/70 px-3.5 py-1.5 shadow-soft-xs">
+            {/* Middle: Live Gamification HUD */}
+            <div className="hidden lg:flex items-center gap-3">
+              {/* Level & XP */}
+              <div className="flex items-center gap-2 rounded-2xl border border-purple-100 bg-purple-50/70 px-3 py-1 shadow-soft-xs">
                 <Trophy className="h-4 w-4 text-purple-600" />
-                <div>
-                  <div className="text-[9px] font-extrabold uppercase tracking-wider text-purple-500">Level {gamification.level}</div>
-                  <div className="text-xs font-black text-purple-900">{gamification.totalPoints} XP</div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-[10px] font-extrabold text-purple-600">Level {gamification.level}</span>
+                  <span className="text-xs font-black text-purple-900">{gamification.totalPoints} XP</span>
                 </div>
               </div>
 
-              {/* Streak Badge */}
-              <div className="flex items-center gap-2 rounded-2xl border border-amber-100 bg-amber-50/70 px-3.5 py-1.5 shadow-soft-xs">
-                <Flame className="h-4 w-4 text-amber-500 fill-amber-400 animate-pulse" />
-                <div>
-                  <div className="text-[9px] font-extrabold uppercase tracking-wider text-amber-600">Streak</div>
-                  <div className="text-xs font-black text-amber-900">{gamification.currentStreakDays} Days</div>
+              {/* Streak */}
+              <div className="flex items-center gap-2 rounded-2xl border border-amber-100 bg-amber-50/70 px-3 py-1 shadow-soft-xs">
+                <Flame className="h-4 w-4 text-amber-500 fill-amber-400" />
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-[10px] font-extrabold text-amber-600">Streak</span>
+                  <span className="text-xs font-black text-amber-900">{gamification.currentStreakDays} Days</span>
                 </div>
               </div>
 
-              {/* Flashcards Queue Badge */}
+              {/* Flashcards Link */}
               <Link
                 to="/kids/review"
-                className="flex items-center gap-2 rounded-2xl border border-emerald-100 bg-emerald-50/70 px-3.5 py-1.5 shadow-soft-xs hover:bg-emerald-100/70 transition-colors"
-                title="Review Flashcards"
+                className="flex items-center gap-2 rounded-2xl border border-emerald-100 bg-emerald-50/70 px-3 py-1 shadow-soft-xs hover:bg-emerald-100 transition-colors"
+                title="Practice Flashcards"
               >
                 <Brain className="h-4 w-4 text-emerald-600" />
-                <div>
-                  <div className="text-[9px] font-extrabold uppercase tracking-wider text-emerald-600">Flashcards</div>
-                  <div className="text-xs font-black text-emerald-900">{reviewQueueCount} Due</div>
-                </div>
+                <span className="text-xs font-black text-emerald-900">{reviewQueueCount} Due</span>
               </Link>
             </div>
 
-            {/* Right: Parent Mode Exit Gate */}
+            {/* Right: Layout Toggles & Parent Mode Exit */}
             <div className="flex items-center gap-2">
+              {viewMode === 'book' && (
+                <>
+                  <button
+                    onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                    className={`rounded-xl border p-2 text-xs font-bold transition-all ${
+                      isSidebarOpen
+                        ? 'border-purple-200 bg-purple-50 text-purple-700'
+                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                    }`}
+                    title="Toggle Chapter Outline"
+                  >
+                    <ListTree className="h-4 w-4" />
+                  </button>
+
+                  <button
+                    onClick={() => setIsCompanionOpen(!isCompanionOpen)}
+                    className={`rounded-xl border p-2 text-xs font-bold transition-all ${
+                      isCompanionOpen
+                        ? 'border-purple-200 bg-purple-50 text-purple-700'
+                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                    }`}
+                    title="Toggle AI Study Buddy & Notes"
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                  </button>
+                </>
+              )}
+
               <button
                 onClick={() => setExiting(true)}
-                className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors shadow-soft-xs"
+                className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
               >
                 <Lock className="h-3.5 w-3.5" />
-                <span>Parent Exit</span>
+                <span className="hidden sm:inline">Parent Exit</span>
               </button>
             </div>
           </div>
-
-          {/* Hub Navigation Tabs Bar */}
-          <nav className="flex items-center gap-1 overflow-x-auto py-2.5 border-t border-slate-100 no-scrollbar">
-            <button
-              onClick={() => setActiveTab('today')}
-              className={`flex shrink-0 items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
-                activeTab === 'today'
-                  ? 'bg-gradient-to-tl from-purple-700 to-pink-500 text-white shadow-soft-sm'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <Sparkles className="h-4 w-4" />
-              <span>Today's Quest</span>
-              {todaySessions.filter((s) => s.status !== 'done').length > 0 && (
-                <span className={`ml-0.5 rounded-full px-1.5 py-0.2 text-[10px] font-extrabold ${activeTab === 'today' ? 'bg-white/20 text-white' : 'bg-purple-100 text-purple-700'}`}>
-                  {todaySessions.filter((s) => s.status !== 'done').length}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={() => setActiveTab('subjects')}
-              className={`flex shrink-0 items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
-                activeTab === 'subjects'
-                  ? 'bg-gradient-to-tl from-purple-700 to-pink-500 text-white shadow-soft-sm'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <BookOpen className="h-4 w-4" />
-              <span>Courses & Subjects</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('reading')}
-              className={`flex shrink-0 items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
-                activeTab === 'reading'
-                  ? 'bg-gradient-to-tl from-purple-700 to-pink-500 text-white shadow-soft-sm'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <FileText className="h-4 w-4" />
-              <span>Reading Studio</span>
-              <span className={`ml-0.5 rounded-full px-1.5 py-0.2 text-[10px] font-extrabold ${activeTab === 'reading' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'}`}>
-                {allReadingTopics.length}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('quizzes')}
-              className={`flex shrink-0 items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
-                activeTab === 'quizzes'
-                  ? 'bg-gradient-to-tl from-purple-700 to-pink-500 text-white shadow-soft-sm'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <FileCheck className="h-4 w-4" />
-              <span>Quizzes & Tests</span>
-              <span className={`ml-0.5 rounded-full px-1.5 py-0.2 text-[10px] font-extrabold ${activeTab === 'quizzes' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'}`}>
-                {allQuizzes.length}
-              </span>
-            </button>
-
-            <Link
-              to="/kids/review"
-              className={`flex shrink-0 items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all text-slate-600 hover:bg-slate-100 hover:text-slate-900`}
-            >
-              <Brain className="h-4 w-4 text-emerald-600" />
-              <span>Flashcard Practice</span>
-            </Link>
-
-            <button
-              onClick={() => setActiveTab('tutor')}
-              className={`flex shrink-0 items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
-                activeTab === 'tutor'
-                  ? 'bg-gradient-to-tl from-purple-700 to-pink-500 text-white shadow-soft-sm'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <HelpCircle className="h-4 w-4" />
-              <span>AI Study Buddy</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('badges')}
-              className={`flex shrink-0 items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
-                activeTab === 'badges'
-                  ? 'bg-gradient-to-tl from-purple-700 to-pink-500 text-white shadow-soft-sm'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <Award className="h-4 w-4" />
-              <span>Badges & Trophies</span>
-              {achievements.length > 0 && (
-                <span className={`ml-0.5 rounded-full px-1.5 py-0.2 text-[10px] font-extrabold ${activeTab === 'badges' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-700'}`}>
-                  {achievements.length}
-                </span>
-              )}
-            </button>
-          </nav>
         </div>
       </header>
 
@@ -562,465 +617,633 @@ export default function KidsHomePage() {
       )}
 
       {/* ========================================================================= */}
-      {/* MAIN HUB WORKSPACE CONTAINER (End to End responsive layout)              */}
+      {/* VIEW 1: INTERACTIVE STORYBOOK & KNOWLEDGE CANVAS (Microsoft Learn Model)   */}
       {/* ========================================================================= */}
-      <main className="w-full px-4 sm:px-6 lg:px-8 pt-6">
-        {/* TAB 1: TODAY'S QUEST & MISSIONS */}
-        {activeTab === 'today' && (
-          <div className="space-y-6">
-            {/* Quick Hero Banner */}
-            <div className="rounded-3xl border border-purple-100 bg-gradient-to-r from-purple-700 via-indigo-600 to-pink-600 p-6 text-white shadow-soft-xl">
-              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                <div className="space-y-1.5 max-w-xl">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-0.5 text-xs font-bold backdrop-blur-md">
-                    <Sparkles className="h-3.5 w-3.5" /> Daily Mission Central
+      {viewMode === 'book' && (
+        <div className="flex-1 flex overflow-hidden">
+          {/* --------------------------------------------------------------------- */}
+          {/* LEFT COLUMN: Table of Contents & Chapter Navigator                     */}
+          {/* --------------------------------------------------------------------- */}
+          {isSidebarOpen && (
+            <aside className="w-80 shrink-0 border-r border-slate-200/80 bg-white flex flex-col h-[calc(100vh-4rem)] sticky top-16 z-20">
+              {/* Header & Search */}
+              <div className="p-4 border-b border-slate-100 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Book className="h-4 w-4 text-purple-600" />
+                    <span className="font-extrabold text-xs uppercase tracking-wider text-slate-500">
+                      Table of Contents
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
+                    {allBookChapters.length} Chapters
                   </span>
-                  <h2 className="text-2xl font-black tracking-tight">Today's Learning Adventure</h2>
-                  <p className="text-xs text-purple-100 leading-relaxed font-medium">
-                    Complete your daily tasks below to earn XP, level up your badge collection, and keep your learning streak on fire! 🔥
-                  </p>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <Link
-                    to="/kids/review"
-                    className="flex items-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-xs font-bold text-purple-900 shadow-soft-md hover:scale-[1.02] active:scale-[0.98] transition-all"
-                  >
-                    <Brain className="h-4 w-4 text-purple-600" />
-                    <span>Review Cards ({reviewQueueCount})</span>
-                  </Link>
-                  <button
-                    onClick={() => setActiveTab('reading')}
-                    className="flex items-center gap-2 rounded-2xl bg-white/10 border border-white/20 px-4 py-2.5 text-xs font-bold text-white backdrop-blur-md hover:bg-white/20 transition-all"
-                  >
-                    <BookOpen className="h-4 w-4" />
-                    <span>Explore Reading</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Today's Tasks Grid */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-extrabold text-base text-slate-800">Your Scheduled Missions</h3>
-                  <p className="text-xs text-slate-400">
-                    {todaySessions.length} {todaySessions.length === 1 ? 'activity' : 'activities'} planned for today
-                  </p>
-                </div>
-              </div>
-
-              {todaySessions.length === 0 ? (
-                <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-slate-200 bg-white p-12 text-center shadow-soft-xs">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-emerald-100 text-emerald-600 mb-3 shadow-soft-sm">
-                    <CheckCircle2 className="h-8 w-8" />
-                  </div>
-                  <h4 className="font-bold text-base text-slate-800">All Caught Up for Today!</h4>
-                  <p className="text-xs text-slate-400 mt-1 max-w-sm">
-                    You've finished everything planned! You can explore subjects, read fun stories, or practice flashcards.
-                  </p>
-                  <div className="mt-4 flex gap-2">
-                    <button
-                      onClick={() => setActiveTab('subjects')}
-                      className="rounded-xl bg-purple-600 px-4 py-2 text-xs font-bold text-white shadow-soft-xs hover:bg-purple-700"
-                    >
-                      Browse Subjects
-                    </button>
-                    <Link
-                      to="/kids/review"
-                      className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100"
-                    >
-                      Practice Flashcards
-                    </Link>
-                  </div>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {todaySessions.map((session) => {
-                    const isDone = session.status === 'done';
-                    const subjectColor = session.topic.unit?.subject?.color || '#7928CA';
-                    const subjectName = session.topic.unit?.subject?.name || 'General';
-
-                    return (
-                      <div
-                        key={session.id}
-                        className={`group relative rounded-3xl border p-5 transition-all ${
-                          isDone
-                            ? 'border-emerald-200 bg-emerald-50/30'
-                            : 'border-slate-100 bg-white shadow-soft-sm hover:shadow-soft-md hover:border-purple-200'
-                        }`}
-                      >
-                        {/* Subject Tag */}
-                        <div className="flex items-center justify-between mb-3">
-                          <span
-                            className="rounded-xl px-2.5 py-1 text-[10px] font-bold text-white shadow-soft-xs"
-                            style={{ backgroundColor: subjectColor }}
-                          >
-                            {subjectName}
-                          </span>
-                          <span className="flex items-center gap-1 text-[11px] font-semibold text-slate-400">
-                            <Clock className="h-3 w-3" /> {session.topic.estimatedMinutes} min
-                          </span>
-                        </div>
-
-                        {/* Title & Unit */}
-                        <div className="mb-4">
-                          <h4 className="font-bold text-sm text-slate-900 line-clamp-1">{session.topic.title}</h4>
-                          {session.topic.unit && (
-                            <p className="text-[11px] font-medium text-slate-400 mt-0.5">
-                              Unit: {session.topic.unit.name}
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Action buttons */}
-                        <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                          {isDone ? (
-                            <span className="flex items-center gap-1 text-xs font-bold text-emerald-600">
-                              <CheckCircle2 className="h-4 w-4" /> Completed! (+10 XP)
-                            </span>
-                          ) : (
-                            <div className="flex items-center gap-2 w-full">
-                              {session.lessonId ? (
-                                <Link
-                                  to={`/kids/lessons/${session.lessonId}`}
-                                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-tl from-purple-700 to-pink-500 py-2 text-xs font-bold text-white shadow-soft-xs hover:scale-[1.02] active:scale-[0.98] transition-all"
-                                >
-                                  <Play className="h-3.5 w-3.5 fill-current" />
-                                  <span>Start Lesson</span>
-                                </Link>
-                              ) : (
-                                <button
-                                  onClick={() => completeSession.mutate(session.id)}
-                                  disabled={completeSession.isPending}
-                                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-2 text-xs font-bold text-white shadow-soft-xs hover:bg-emerald-700 transition-all"
-                                >
-                                  <Check className="h-3.5 w-3.5" />
-                                  <span>Mark Done</span>
-                                </button>
-                              )}
-
-                              <button
-                                onClick={() => {
-                                  // Open reading if available
-                                  const foundTopic = subjects
-                                    .flatMap((s) => s.units)
-                                    .flatMap((u) => u.topics)
-                                    .find((t) => t.id === session.topic.id);
-                                  if (foundTopic) setSelectedTopicDetail(foundTopic);
-                                }}
-                                className="rounded-xl border border-slate-200 bg-slate-50 p-2 text-slate-600 hover:bg-slate-100 transition-colors"
-                                title="Inspect Details"
-                              >
-                                <Compass className="h-4 w-4" />
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* TAB 2: COURSES & SUBJECTS HIERARCHY */}
-        {activeTab === 'subjects' && (
-          <div className="space-y-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h3 className="font-extrabold text-lg text-slate-900">Your Learning Courses</h3>
-                <p className="text-xs text-slate-400">
-                  Explore curriculum units, lessons, quizzes, and practice materials for every subject.
-                </p>
-              </div>
-
-              {/* Subject Tabs Filter */}
-              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-                <button
-                  onClick={() => setSelectedSubjectId(null)}
-                  className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
-                    selectedSubjectId === null
-                      ? 'bg-slate-900 text-white shadow-soft-xs'
-                      : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-                  }`}
-                >
-                  All Subjects ({subjects.length})
-                </button>
-                {subjects.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => setSelectedSubjectId(s.id)}
-                    className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
-                      selectedSubjectId === s.id
-                        ? 'text-white shadow-soft-xs'
-                        : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
-                    style={selectedSubjectId === s.id ? { backgroundColor: s.color || '#7928CA' } : {}}
-                  >
-                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: s.color || '#7928CA' }} />
-                    <span>{s.name}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Subjects Grid & Detailed Units */}
-            <div className="space-y-8">
-              {subjects
-                .filter((s) => selectedSubjectId === null || s.id === selectedSubjectId)
-                .map((subject) => (
-                  <div
-                    key={subject.id}
-                    className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft-sm"
-                  >
-                    {/* Subject Header */}
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-6">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className="flex h-10 w-10 items-center justify-center rounded-2xl text-white font-black text-base shadow-soft-xs"
-                          style={{ backgroundColor: subject.color || '#7928CA' }}
-                        >
-                          <Book className="h-5 w-5" />
-                        </div>
-                        <div>
-                          <h4 className="font-extrabold text-base text-slate-900">{subject.name}</h4>
-                          <p className="text-xs text-slate-400">
-                            {subject.units.length} {subject.units.length === 1 ? 'Unit' : 'Units'} •{' '}
-                            {subject.units.reduce((acc, u) => acc + u.topics.length, 0)} Topics
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Units Accordion */}
-                    <div className="space-y-4">
-                      {subject.units.map((unit, uIdx) => (
-                        <div
-                          key={unit.id}
-                          className="rounded-2xl border border-slate-100 bg-slate-50/50 p-4 transition-all hover:bg-slate-50"
-                        >
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-2">
-                              <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-purple-100 text-[11px] font-bold text-purple-700">
-                                {uIdx + 1}
-                              </span>
-                              <h5 className="font-bold text-xs text-slate-800">{unit.name}</h5>
-                            </div>
-                            <span className="text-[11px] font-semibold text-slate-400">
-                              {unit.topics.length} topics
-                            </span>
-                          </div>
-
-                          {/* Topics List within Unit */}
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                            {unit.topics.map((topic) => {
-                              const hasLesson = topic.lessons.length > 0;
-                              const hasQuiz = topic.assessments.length > 0;
-                              const hasReading = Boolean(topic.learningContent && topic.learningContent.length > 0);
-
-                              return (
-                                <div
-                                  key={topic.id}
-                                  onClick={() => setSelectedTopicDetail(topic)}
-                                  className="group rounded-xl border border-slate-200/80 bg-white p-3.5 cursor-pointer shadow-soft-xs hover:border-purple-300 hover:shadow-soft-md transition-all"
-                                >
-                                  <div className="flex items-start justify-between gap-2">
-                                    <h6 className="font-bold text-xs text-slate-800 group-hover:text-purple-700 transition-colors line-clamp-1">
-                                      {topic.title}
-                                    </h6>
-                                    <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-purple-600 transition-colors shrink-0" />
-                                  </div>
-
-                                  <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                                    {hasReading && (
-                                      <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">
-                                        <FileText className="h-2.5 w-2.5" /> Reading
-                                      </span>
-                                    )}
-                                    {hasLesson && (
-                                      <span className="inline-flex items-center gap-1 rounded-md bg-purple-50 px-2 py-0.5 text-[10px] font-bold text-purple-700">
-                                        <Play className="h-2.5 w-2.5" /> Lesson
-                                      </span>
-                                    )}
-                                    {hasQuiz && (
-                                      <span className="inline-flex items-center gap-1 rounded-md bg-pink-50 px-2 py-0.5 text-[10px] font-bold text-pink-700">
-                                        <FileCheck className="h-2.5 w-2.5" /> Quiz
-                                      </span>
-                                    )}
-                                    {topic.flashcards.length > 0 && (
-                                      <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
-                                        <Brain className="h-2.5 w-2.5" /> {topic.flashcards.length} Cards
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-            </div>
-          </div>
-        )}
-
-        {/* TAB 3: READING STUDIO & LIBRARY */}
-        {activeTab === 'reading' && (
-          <div className="space-y-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <h3 className="font-extrabold text-lg text-slate-900">Reading Studio & Library 📖</h3>
-                <p className="text-xs text-slate-400">
-                  Read illustrated topic guides, stories, and background notes to boost your knowledge.
-                </p>
-              </div>
-
-              {/* Search & Filter */}
-              <div className="flex flex-wrap items-center gap-2">
+                {/* Search in TOC */}
                 <div className="relative">
                   <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
                   <input
                     type="text"
-                    placeholder="Search reading topics..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="rounded-xl border border-slate-200 bg-white pl-8 pr-3 py-1.5 text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                    placeholder="Search chapters & concepts..."
+                    value={tocSearch}
+                    onChange={(e) => setTocSearch(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-8 pr-3 py-1.5 text-xs font-medium text-slate-800 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/20"
                   />
                 </div>
-
-                <select
-                  value={selectedSubjectFilter}
-                  onChange={(e) => setSelectedSubjectFilter(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-                  aria-label="Filter reading materials by subject"
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 focus:outline-none"
-                >
-                  <option value="all">All Subjects</option>
-                  {subjects.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
               </div>
-            </div>
 
-            {filteredReading.length === 0 ? (
-              <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-12 text-center shadow-soft-xs">
-                <p className="text-xs font-bold text-slate-600">No reading materials found matching your search</p>
+              {/* Subjects & Units List */}
+              <div className="flex-1 overflow-y-auto p-3 space-y-4 no-scrollbar">
+                {subjects.map((subject) => {
+                  const subjectChapters = allBookChapters.filter((c) => c.subject.id === subject.id);
+                  if (subjectChapters.length === 0) return null;
+
+                  return (
+                    <div key={subject.id} className="space-y-1">
+                      {/* Subject Pill */}
+                      <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-slate-50">
+                        <span
+                          className="h-2.5 w-2.5 rounded-full shrink-0"
+                          style={{ backgroundColor: subject.color || '#7928CA' }}
+                        />
+                        <span className="text-xs font-black text-slate-800 truncate">{subject.name}</span>
+                        <span className="ml-auto text-[10px] font-bold text-slate-400">
+                          {subjectChapters.length}
+                        </span>
+                      </div>
+
+                      {/* Units under Subject */}
+                      <div className="pl-2 space-y-1">
+                        {subject.units.map((unit) => {
+                          const isExpanded = expandedUnits[unit.id] ?? true;
+                          const filteredTopics = unit.topics.filter(
+                            (t) =>
+                              tocSearch === '' ||
+                              t.title.toLowerCase().includes(tocSearch.toLowerCase()) ||
+                              unit.name.toLowerCase().includes(tocSearch.toLowerCase())
+                          );
+
+                          if (filteredTopics.length === 0) return null;
+
+                          return (
+                            <div key={unit.id} className="space-y-0.5">
+                              {/* Unit Accordion Header */}
+                              <button
+                                onClick={() => toggleUnitAccordion(unit.id)}
+                                className="w-full flex items-center justify-between px-2 py-1 text-left rounded-lg hover:bg-slate-100/70 transition-colors group"
+                              >
+                                <span className="text-[11px] font-bold text-slate-600 group-hover:text-slate-900 truncate">
+                                  {unit.name}
+                                </span>
+                                <ChevronDown
+                                  className={`h-3 w-3 text-slate-400 transition-transform ${
+                                    isExpanded ? '' : '-rotate-90'
+                                  }`}
+                                />
+                              </button>
+
+                              {/* Topics / Chapters list */}
+                              {isExpanded && (
+                                <div className="pl-2 space-y-0.5 border-l-2 border-slate-100 ml-2">
+                                  {filteredTopics.map((topic) => {
+                                    const isSelected = selectedTopicId === topic.id;
+                                    const hasReading = Boolean(
+                                      topic.learningContent && topic.learningContent.length > 0
+                                    );
+                                    const hasQuiz = topic.assessments.length > 0;
+
+                                    return (
+                                      <button
+                                        key={topic.id}
+                                        onClick={() => handleSelectChapter(topic.id, unit.id)}
+                                        className={`w-full flex items-start gap-2 px-2.5 py-2 text-left rounded-xl transition-all ${
+                                          isSelected
+                                            ? 'bg-purple-600 text-white font-bold shadow-soft-xs'
+                                            : 'text-slate-600 hover:bg-purple-50 hover:text-purple-700 font-medium'
+                                        }`}
+                                      >
+                                        <div className="mt-0.5">
+                                          {hasReading ? (
+                                            <FileText className="h-3.5 w-3.5 shrink-0" />
+                                          ) : (
+                                            <BookOpen className="h-3.5 w-3.5 shrink-0" />
+                                          )}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <div className="text-xs truncate">{topic.title}</div>
+                                          <div className="flex items-center gap-1.5 mt-0.5">
+                                            <span
+                                              className={`text-[9px] ${
+                                                isSelected ? 'text-purple-200' : 'text-slate-400'
+                                              }`}
+                                            >
+                                              {topic.estimatedMinutes}m read
+                                            </span>
+                                            {hasQuiz && (
+                                              <span
+                                                className={`rounded px-1 text-[8px] font-extrabold ${
+                                                  isSelected
+                                                    ? 'bg-white/20 text-white'
+                                                    : 'bg-pink-100 text-pink-700'
+                                                }`}
+                                              >
+                                                Quiz
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </aside>
+          )}
+
+          {/* --------------------------------------------------------------------- */}
+          {/* CENTER CANVAS: Flowing Interactive Reading & Concept Canvas             */}
+          {/* --------------------------------------------------------------------- */}
+          <main className="flex-1 overflow-y-auto p-4 sm:p-8 lg:p-10 h-[calc(100vh-4rem)]">
+            {currentChapter ? (
+              <div className="max-w-4xl mx-auto space-y-8 pb-20">
+                {/* 1. Breadcrumb & Chapter Hierarchy */}
+                <nav className="flex items-center gap-2 text-xs font-semibold text-slate-400">
+                  <span
+                    className="font-bold uppercase tracking-wider"
+                    style={{ color: currentChapter.subject.color || '#7928CA' }}
+                  >
+                    {currentChapter.subject.name}
+                  </span>
+                  <span>/</span>
+                  <span className="text-slate-500">{currentChapter.unit.name}</span>
+                  <span>/</span>
+                  <span className="text-slate-800 font-bold">Chapter {currentChapter.chapterIndex}</span>
+                </nav>
+
+                {/* 2. Storybook Chapter Hero Title Card */}
+                <div className="rounded-3xl border border-slate-100 bg-white p-6 sm:p-8 shadow-soft-sm relative overflow-hidden">
+                  <div
+                    className="absolute top-0 left-0 right-0 h-1.5"
+                    style={{ backgroundColor: currentChapter.subject.color || '#7928CA' }}
+                  />
+
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-3 py-0.5 text-xs font-bold text-purple-800">
+                          <Sparkles className="h-3.5 w-3.5 text-purple-600" /> Chapter {currentChapter.chapterIndex} of{' '}
+                          {allBookChapters.length}
+                        </span>
+                        <span className="flex items-center gap-1 text-xs font-medium text-slate-400">
+                          <Clock className="h-3.5 w-3.5" /> ~{currentChapter.topic.estimatedMinutes} min read
+                        </span>
+                      </div>
+                      <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                        {currentChapter.topic.title}
+                      </h2>
+                    </div>
+
+                    {/* Quick XP Reward & Audio Bar */}
+                    <div className="flex items-center gap-2 self-start sm:self-center">
+                      <div className="flex items-center gap-1.5 rounded-2xl bg-amber-50 border border-amber-200 px-3 py-1.5 text-xs font-black text-amber-800">
+                        <Star className="h-4 w-4 fill-amber-400 text-amber-500" />
+                        <span>+25 XP Upon Completion</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Audio Read-Aloud Narration Toolbar */}
+                  <div className="mt-6 flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-100">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handleToggleAudio}
+                        className={`flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-bold transition-all shadow-soft-xs ${
+                          isPlayingAudio
+                            ? 'bg-purple-600 text-white animate-pulse'
+                            : 'bg-purple-50 text-purple-700 hover:bg-purple-100'
+                        }`}
+                      >
+                        {isPlayingAudio ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                        <span>{isPlayingAudio ? 'Pause Narration' : 'Read Aloud to Me 🎧'}</span>
+                      </button>
+
+                      {/* Speed selector */}
+                      <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-0.5">
+                        {[0.8, 1.0, 1.2].map((rate) => (
+                          <button
+                            key={rate}
+                            onClick={() => handleRateChange(rate)}
+                            className={`rounded-lg px-2 py-1 text-[10px] font-bold transition-all ${
+                              speechRate === rate
+                                ? 'bg-white text-purple-700 shadow-soft-xs'
+                                : 'text-slate-500 hover:text-slate-800'
+                            }`}
+                          >
+                            {rate}x
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Font Size Comfort Controls */}
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">Text Size:</span>
+                      <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-0.5">
+                        <button
+                          onClick={() => setFontSize('normal')}
+                          className={`rounded-lg px-2.5 py-1 text-xs font-bold ${
+                            fontSize === 'normal' ? 'bg-white text-purple-700 shadow-soft-xs' : 'text-slate-500'
+                          }`}
+                        >
+                          A
+                        </button>
+                        <button
+                          onClick={() => setFontSize('large')}
+                          className={`rounded-lg px-2.5 py-1 text-sm font-bold ${
+                            fontSize === 'large' ? 'bg-white text-purple-700 shadow-soft-xs' : 'text-slate-500'
+                          }`}
+                        >
+                          A+
+                        </button>
+                        <button
+                          onClick={() => setFontSize('huge')}
+                          className={`rounded-lg px-2.5 py-1 text-base font-bold ${
+                            fontSize === 'huge' ? 'bg-white text-purple-700 shadow-soft-xs' : 'text-slate-500'
+                          }`}
+                        >
+                          A++
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Main Story & Concept Reading Content (Illustrated & Formatted) */}
+                <article
+                  className={`rounded-3xl border border-slate-100 bg-white p-6 sm:p-10 shadow-soft-sm leading-relaxed transition-all ${
+                    fontSize === 'normal'
+                      ? 'text-sm'
+                      : fontSize === 'large'
+                      ? 'text-base font-medium'
+                      : 'text-lg font-medium leading-loose'
+                  }`}
+                >
+                  {currentChapter.topic.learningContent ? (
+                    <div className="prose prose-purple max-w-none text-slate-800 space-y-6">
+                      <RichContent content={currentChapter.topic.learningContent} />
+                    </div>
+                  ) : (
+                    <div className="py-8 text-center text-slate-400 space-y-2">
+                      <BookOpen className="h-10 w-10 mx-auto text-slate-300" />
+                      <p className="text-sm font-semibold">Reading story is being crafted for this topic.</p>
+                    </div>
+                  )}
+
+                  {/* Big Idea / Key Takeaway Callout Box */}
+                  <div className="mt-8 rounded-2xl border border-purple-100 bg-purple-50/60 p-5 flex items-start gap-3.5">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-600 text-white shrink-0 shadow-soft-xs">
+                      <Lightbulb className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-extrabold text-sm text-purple-950">💡 Big Idea in this Concept</h4>
+                      <p className="text-xs text-purple-800 mt-1 leading-relaxed">
+                        Understanding <strong>{currentChapter.topic.title}</strong> helps you unlock deeper mastery
+                        in {currentChapter.subject.name}. Ask your AI Study Buddy if you want a fun story or riddle!
+                      </p>
+                    </div>
+                  </div>
+                </article>
+
+                {/* 4. INLINE INTERACTIVE CHECKPOINT: Flashcard Practice (No Modals!) */}
+                {currentChapter.topic.flashcards && currentChapter.topic.flashcards.length > 0 && (
+                  <section className="rounded-3xl border border-emerald-100 bg-white p-6 sm:p-8 shadow-soft-sm space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                      <div className="flex items-center gap-2">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+                          <Brain className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <h3 className="font-black text-sm text-slate-900">
+                            Interactive Concept Check: Flip Flashcards
+                          </h3>
+                          <p className="text-xs text-slate-400">
+                            Card {activeCardIndex + 1} of {currentChapter.topic.flashcards.length}
+                          </p>
+                        </div>
+                      </div>
+
+                      <Link
+                        to="/kids/review"
+                        className="text-xs font-bold text-emerald-600 hover:text-emerald-700 underline"
+                      >
+                        Full Deck Mode →
+                      </Link>
+                    </div>
+
+                    {/* The Flip Card Stage */}
+                    <div className="flex flex-col items-center justify-center py-4">
+                      <div
+                        onClick={() => setIsCardFlipped(!isCardFlipped)}
+                        className={`w-full max-w-md min-h-[160px] rounded-2xl border p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-all transform hover:scale-[1.01] active:scale-[0.99] shadow-soft-sm ${
+                          isCardFlipped
+                            ? 'border-purple-300 bg-gradient-to-tr from-purple-50 to-pink-50'
+                            : 'border-slate-200 bg-slate-50'
+                        }`}
+                      >
+                        <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-2">
+                          {isCardFlipped ? 'Answer / Concept' : 'Question (Click to flip)'}
+                        </span>
+                        <p className="font-bold text-base text-slate-800">
+                          {isCardFlipped
+                            ? currentChapter.topic.flashcards[activeCardIndex]?.back || 'Concept explanation'
+                            : currentChapter.topic.flashcards[activeCardIndex]?.front || 'Question prompt'}
+                        </p>
+                      </div>
+
+                      {/* Card Carousel Controls */}
+                      <div className="flex items-center gap-4 mt-4">
+                        <button
+                          onClick={() => {
+                            setIsCardFlipped(false);
+                            setActiveCardIndex((prev) =>
+                              prev > 0 ? prev - 1 : currentChapter.topic.flashcards.length - 1
+                            );
+                          }}
+                          className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-soft-xs"
+                        >
+                          <ChevronLeft className="h-4 w-4" /> Previous
+                        </button>
+
+                        <button
+                          onClick={() => setIsCardFlipped(!isCardFlipped)}
+                          className="flex items-center gap-1.5 rounded-xl bg-purple-600 px-4 py-1.5 text-xs font-bold text-white shadow-soft-xs hover:bg-purple-700"
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" /> Flip Card
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setIsCardFlipped(false);
+                            setActiveCardIndex((prev) =>
+                              prev < currentChapter.topic.flashcards.length - 1 ? prev + 1 : 0
+                            );
+                          }}
+                          className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-soft-xs"
+                        >
+                          Next <ChevronRight className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </section>
+                )}
+
+                {/* 5. INLINE KNOWLEDGE CHECK: Topic Quiz or Lesson Action */}
+                {currentChapter.topic.assessments && currentChapter.topic.assessments.length > 0 && (
+                  <section className="rounded-3xl border border-pink-100 bg-gradient-to-r from-pink-500/10 via-purple-500/10 to-indigo-500/10 p-6 sm:p-8 shadow-soft-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-pink-600 text-white font-black text-xs">
+                          📝
+                        </span>
+                        <h3 className="font-extrabold text-base text-slate-900">
+                          {currentChapter.topic.assessments[0].title}
+                        </h3>
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        Ready to test what you just read? Score 80%+ to earn the Explorer Star badge!
+                      </p>
+                    </div>
+
+                    <Link
+                      to={`/kids/assessments/${currentChapter.topic.assessments[0].id}`}
+                      className="flex items-center gap-2 rounded-2xl bg-gradient-to-tl from-purple-700 to-pink-500 px-5 py-2.5 text-xs font-black text-white shadow-soft-md hover:scale-[1.02] active:scale-[0.98] transition-all shrink-0"
+                    >
+                      <Play className="h-4 w-4 fill-current" />
+                      <span>Take Chapter Quiz</span>
+                    </Link>
+                  </section>
+                )}
+
+                {/* 6. BOTTOM CHAPTER NAVIGATION (Sequential Book Flow) */}
+                <div className="pt-6 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  {prevChapter ? (
+                    <button
+                      onClick={() =>
+                        handleSelectChapter(
+                          prevChapter.topic.id,
+                          prevChapter.unit.id
+                        )
+                      }
+                      className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-soft-xs transition-all"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      <div className="text-left">
+                        <div className="text-[10px] text-slate-400 uppercase font-semibold">Previous Chapter</div>
+                        <div className="font-bold text-slate-900 truncate max-w-[160px]">
+                          {prevChapter.topic.title}
+                        </div>
+                      </div>
+                    </button>
+                  ) : (
+                    <div />
+                  )}
+
+                  {nextChapter ? (
+                    <button
+                      onClick={() =>
+                        handleSelectChapter(
+                          nextChapter.topic.id,
+                          nextChapter.unit.id
+                        )
+                      }
+                      className="flex items-center gap-2 rounded-2xl bg-gradient-to-tl from-purple-700 to-pink-500 px-6 py-3 text-xs font-black text-white shadow-soft-md hover:scale-[1.02] active:scale-[0.98] transition-all ml-auto"
+                    >
+                      <div className="text-right">
+                        <div className="text-[10px] text-purple-200 uppercase font-semibold">
+                          Complete & Next Chapter
+                        </div>
+                        <div className="font-extrabold truncate max-w-[200px]">
+                          {nextChapter.topic.title} →
+                        </div>
+                      </div>
+                    </button>
+                  ) : (
+                    <div className="rounded-2xl bg-emerald-50 border border-emerald-200 px-4 py-2 text-xs font-bold text-emerald-800">
+                      🎉 You reached the end of the curriculum!
+                    </div>
+                  )}
+                </div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                {filteredReading.map(({ topic, unitName, subjectName, subjectColor }) => (
-                  <div
-                    key={topic.id}
-                    className="group rounded-3xl border border-slate-100 bg-white p-5 shadow-soft-sm hover:shadow-soft-md hover:border-purple-200 transition-all flex flex-col justify-between"
-                  >
-                    <div>
+              <div className="py-20 text-center text-slate-400">
+                <BookOpen className="h-12 w-12 mx-auto text-slate-300 mb-3" />
+                <h3 className="font-bold text-base text-slate-700">No chapters found</h3>
+              </div>
+            )}
+          </main>
+
+          {/* --------------------------------------------------------------------- */}
+          {/* RIGHT COLUMN: Docked AI Study Buddy & Topic Notes                      */}
+          {/* --------------------------------------------------------------------- */}
+          {isCompanionOpen && (
+            <aside className="w-88 shrink-0 border-l border-slate-200/80 bg-white flex flex-col h-[calc(100vh-4rem)] sticky top-16 z-20">
+              <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-purple-100 text-purple-700">
+                    <Sparkles className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-xs text-slate-800">AI Study Buddy</h4>
+                    <p className="text-[10px] text-slate-400">Grounded on this topic</p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setIsCompanionOpen(false)}
+                  className="rounded-lg p-1 text-slate-400 hover:bg-slate-100"
+                  title="Close Companion"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Chat Canvas inside Sidebar */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
+                {/* Topic context pill */}
+                {currentChapter && (
+                  <div className="rounded-2xl border border-purple-100 bg-purple-50/50 p-3 text-xs">
+                    <span className="font-extrabold text-purple-900">Current Chapter:</span>
+                    <p className="font-medium text-slate-700 truncate">{currentChapter.topic.title}</p>
+                  </div>
+                )}
+
+                {/* Tutor Chat Engine */}
+                {child && (
+                  <TutorChat
+                    messagesUrl="/kids/tutor/messages"
+                    kidsStyle
+                    lessonId={currentChapter?.topic.lessons[0]?.id}
+                  />
+                )}
+              </div>
+            </aside>
+          )}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* VIEW 2: TODAY'S QUEST & MISSIONS CENTRAL                                  */}
+      {/* ========================================================================= */}
+      {viewMode === 'today' && (
+        <main className="w-full px-4 sm:px-6 lg:px-8 py-8 max-w-6xl mx-auto space-y-8 flex-1">
+          {/* Hero Banner */}
+          <div className="rounded-3xl border border-purple-100 bg-gradient-to-r from-purple-700 via-indigo-600 to-pink-600 p-6 sm:p-8 text-white shadow-soft-xl">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="space-y-2 max-w-xl">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-0.5 text-xs font-bold backdrop-blur-md">
+                  <Sparkles className="h-3.5 w-3.5" /> Daily Mission HQ
+                </span>
+                <h2 className="text-2xl sm:text-3xl font-black tracking-tight">Today's Learning Quests</h2>
+                <p className="text-xs sm:text-sm text-purple-100 leading-relaxed font-medium">
+                  Complete your scheduled activities to keep your {gamification.currentStreakDays}-day streak burning
+                  and level up your XP! 🔥
+                </p>
+              </div>
+
+              <button
+                onClick={() => setViewMode('book')}
+                className="flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-xs font-black text-purple-900 shadow-soft-md hover:scale-[1.02] active:scale-[0.98] transition-all"
+              >
+                <BookOpen className="h-4 w-4 text-purple-600" />
+                <span>Open Storybook Reader</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Today's Missions List */}
+          <div className="space-y-4">
+            <h3 className="font-extrabold text-lg text-slate-800">Scheduled Activities</h3>
+
+            {todaySessions.length === 0 ? (
+              <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-12 text-center shadow-soft-xs">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-600 mx-auto mb-3">
+                  <CheckCircle2 className="h-7 w-7" />
+                </div>
+                <h4 className="font-bold text-base text-slate-800">All Done for Today!</h4>
+                <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                  You have completed all scheduled tasks. Open the Storybook to explore any chapter you like!
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {todaySessions.map((session) => {
+                  const isDone = session.status === 'done';
+                  const subjectColor = session.topic.unit?.subject?.color || '#7928CA';
+                  const subjectName = session.topic.unit?.subject?.name || 'General';
+
+                  return (
+                    <div
+                      key={session.id}
+                      className={`rounded-3xl border p-5 transition-all ${
+                        isDone
+                          ? 'border-emerald-200 bg-emerald-50/40'
+                          : 'border-slate-100 bg-white shadow-soft-sm hover:shadow-soft-md'
+                      }`}
+                    >
                       <div className="flex items-center justify-between mb-3">
                         <span
-                          className="rounded-lg px-2 py-0.5 text-[10px] font-extrabold text-white"
+                          className="rounded-xl px-2.5 py-1 text-[10px] font-bold text-white shadow-soft-xs"
                           style={{ backgroundColor: subjectColor }}
                         >
                           {subjectName}
                         </span>
-                        <span className="text-[10px] font-semibold text-slate-400">Unit: {unitName}</span>
-                      </div>
-
-                      <h4 className="font-extrabold text-sm text-slate-900 mb-2 group-hover:text-purple-700 transition-colors">
-                        {topic.title}
-                      </h4>
-
-                      <p className="text-xs text-slate-500 line-clamp-3 leading-relaxed font-normal">
-                        {topic.learningContent?.replace(/<[^>]*>?/gm, '').slice(0, 150)}...
-                      </p>
-                    </div>
-
-                    <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
-                      <span className="text-[11px] font-semibold text-slate-400">~{topic.estimatedMinutes} min read</span>
-                      <button
-                        onClick={() =>
-                          setReadingTopic({
-                            id: topic.id,
-                            title: topic.title,
-                            content: topic.learningContent || '',
-                            subjectName,
-                            subjectColor,
-                          })
-                        }
-                        className="flex items-center gap-1.5 rounded-xl bg-purple-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-soft-xs hover:bg-purple-700 transition-all"
-                      >
-                        <BookOpen className="h-3.5 w-3.5" />
-                        <span>Read Now</span>
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* TAB 4: QUIZZES & TESTS */}
-        {activeTab === 'quizzes' && (
-          <div className="space-y-6">
-            <div>
-              <h3 className="font-extrabold text-lg text-slate-900">Quizzes & Knowledge Checks 🎯</h3>
-              <p className="text-xs text-slate-400">
-                Test what you've learned and earn badges and high scores!
-              </p>
-            </div>
-
-            {allQuizzes.length === 0 ? (
-              <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-12 text-center shadow-soft-xs">
-                <p className="text-xs font-bold text-slate-600">No quizzes available yet</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                {allQuizzes.map(({ assessment, topicTitle, subjectName, subjectColor }) => {
-                  const latestAttempt = assessment.attempts?.[0];
-                  const scorePercent = latestAttempt?.score !== null && latestAttempt?.score !== undefined ? Math.round(latestAttempt.score * 100) : null;
-
-                  return (
-                    <div
-                      key={assessment.id}
-                      className="rounded-3xl border border-slate-100 bg-white p-5 shadow-soft-sm hover:shadow-soft-md transition-all flex flex-col justify-between"
-                    >
-                      <div>
-                        <div className="flex items-center justify-between mb-3">
-                          <span
-                            className="rounded-lg px-2 py-0.5 text-[10px] font-extrabold text-white"
-                            style={{ backgroundColor: subjectColor }}
-                          >
-                            {subjectName}
-                          </span>
-                          {scorePercent !== null && (
-                            <span className="flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-100">
-                              <Star className="h-3 w-3 fill-emerald-500" /> {scorePercent}%
-                            </span>
-                          )}
-                        </div>
-
-                        <h4 className="font-extrabold text-sm text-slate-900 mb-1">{assessment.title}</h4>
-                        <p className="text-xs text-slate-400">Topic: {topicTitle}</p>
-                      </div>
-
-                      <div className="mt-5 pt-3 border-t border-slate-100 flex items-center justify-between">
-                        <span className="text-[11px] font-semibold text-slate-400">
-                          {assessment.questions?.length ?? 5} Questions
+                        <span className="flex items-center gap-1 text-[11px] font-semibold text-slate-400">
+                          <Clock className="h-3 w-3" /> {session.topic.estimatedMinutes} min
                         </span>
-                        <Link
-                          to={`/kids/assessments/${assessment.id}`}
-                          className="flex items-center gap-1.5 rounded-xl bg-gradient-to-tl from-purple-700 to-pink-500 px-4 py-2 text-xs font-bold text-white shadow-soft-xs hover:scale-[1.02] active:scale-[0.98] transition-all"
-                        >
-                          <Play className="h-3.5 w-3.5 fill-current" />
-                          <span>{latestAttempt ? 'Retake Quiz' : 'Take Quiz'}</span>
-                        </Link>
+                      </div>
+
+                      <h4 className="font-bold text-sm text-slate-900 mb-1">{session.topic.title}</h4>
+                      {session.topic.unit && (
+                        <p className="text-[11px] font-medium text-slate-400 mb-4">Unit: {session.topic.unit.name}</p>
+                      )}
+
+                      <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+                        {isDone ? (
+                          <span className="flex items-center gap-1 text-xs font-bold text-emerald-600">
+                            <CheckCircle2 className="h-4 w-4" /> Completed (+10 XP)
+                          </span>
+                        ) : (
+                          <div className="flex items-center gap-2 w-full">
+                            <button
+                              onClick={() => {
+                                setSelectedTopicId(session.topic.id);
+                                setViewMode('book');
+                              }}
+                              className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-purple-600 py-2 text-xs font-bold text-white shadow-soft-xs hover:bg-purple-700"
+                            >
+                              <BookOpen className="h-3.5 w-3.5" />
+                              <span>Read Chapter</span>
+                            </button>
+
+                            <button
+                              onClick={() => completeSession.mutate(session.id)}
+                              disabled={completeSession.isPending}
+                              className="rounded-xl border border-slate-200 bg-slate-50 p-2 text-slate-600 hover:bg-slate-100"
+                              title="Mark Done"
+                            >
+                              <Check className="h-4 w-4" />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
@@ -1028,371 +1251,49 @@ export default function KidsHomePage() {
               </div>
             )}
           </div>
-        )}
+        </main>
+      )}
 
-        {/* TAB 5: AI STUDY BUDDY & TUTOR */}
-        {activeTab === 'tutor' && (
-          <div className="space-y-6">
-            <div className="rounded-3xl border border-purple-100 bg-white p-6 shadow-soft-xl">
-              <div className="flex items-center gap-3 border-b border-slate-100 pb-4 mb-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-purple-600 to-pink-500 text-white shadow-soft-md">
-                  <Sparkles className="h-6 w-6" />
-                </div>
-                <div>
-                  <h3 className="font-extrabold text-base text-slate-900">AI Study Buddy & Friendly Tutor 🤖</h3>
-                  <p className="text-xs text-slate-400">
-                    Ask any question, get simple explanations, practice puzzles, or ask for help with your homework.
-                  </p>
-                </div>
-              </div>
-
-              {/* Suggested prompt starter chips */}
-              <div className="mb-4">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">Try asking:</p>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    'Explain gravity like I am 8 years old',
-                    'Give me a fun science riddle',
-                    'How do plants make their own food?',
-                    'Can you quiz me on solar system facts?',
-                    'Help me understand fractions with pizza slices',
-                  ].map((prompt, pIdx) => (
-                    <button
-                      key={pIdx}
-                      className="rounded-xl border border-purple-200/80 bg-purple-50/50 px-3 py-1.5 text-xs font-semibold text-purple-700 hover:bg-purple-100 hover:border-purple-300 transition-colors"
-                      onClick={() => {
-                        const inputEl = document.querySelector('textarea, input[placeholder*="Ask"]') as HTMLInputElement;
-                        if (inputEl) {
-                          inputEl.value = prompt;
-                          inputEl.focus();
-                        }
-                      }}
-                    >
-                      {prompt}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Tutor Chat Integration */}
-              <div className="rounded-2xl border border-slate-100 bg-slate-50/50 p-2">
-                {subjects.length > 0 && subjects[0].units.length > 0 && subjects[0].units[0].topics.length > 0 ? (
-                  <TutorChat
-                    kidsStyle
-                    messagesUrl={`/kids/topics/${subjects[0].units[0].topics[0].id}/tutor/messages`}
-                  />
-                ) : (
-                  <p className="p-8 text-center text-xs text-slate-400">Select a course to chat with the AI tutor.</p>
-                )}
-              </div>
-            </div>
+      {/* ========================================================================= */}
+      {/* VIEW 3: TROPHY ROOM & BADGES                                              */}
+      {/* ========================================================================= */}
+      {viewMode === 'trophies' && (
+        <main className="w-full px-4 sm:px-6 lg:px-8 py-8 max-w-6xl mx-auto space-y-8 flex-1">
+          <div>
+            <h3 className="font-black text-2xl text-slate-900">Hall of Achievements 🏆</h3>
+            <p className="text-xs text-slate-500 mt-1">
+              Every completed chapter, quiz, and study streak unlocks new badges!
+            </p>
           </div>
-        )}
 
-        {/* TAB 6: BADGES & ACHIEVEMENTS */}
-        {activeTab === 'badges' && (
-          <div className="space-y-6">
-            <div className="rounded-3xl border border-amber-100 bg-gradient-to-r from-amber-500 via-orange-500 to-pink-500 p-6 text-white shadow-soft-xl">
-              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                <div className="space-y-1">
-                  <span className="inline-flex items-center gap-1 rounded-full bg-white/20 px-3 py-0.5 text-xs font-bold backdrop-blur-md">
-                    <Trophy className="h-3.5 w-3.5" /> Hall of Achievements
-                  </span>
-                  <h2 className="text-2xl font-black">Your Trophy Case</h2>
-                  <p className="text-xs text-amber-100 font-medium">
-                    You have unlocked {achievements.length} achievements so far! Keep completing lessons and reviews to unlock more.
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-3 rounded-2xl bg-white/15 px-4 py-2 backdrop-blur-md">
-                  <Star className="h-5 w-5 text-amber-200 fill-amber-200" />
-                  <div>
-                    <div className="text-[10px] font-bold uppercase text-amber-100">Total Points</div>
-                    <div className="text-base font-black">{gamification.totalPoints} XP</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {achievements.length === 0 ? (
-              <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-12 text-center shadow-soft-xs">
-                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-100 text-amber-600 mb-3">
-                  <Award className="h-7 w-7" />
-                </div>
-                <h4 className="font-bold text-base text-slate-800">Your First Badge Awaits!</h4>
-                <p className="text-xs text-slate-400 mt-1 max-w-sm">
-                  Complete your first lesson, finish a quiz, or review 5 flashcards to unlock your first shiny badge!
-                </p>
+              <div className="col-span-full rounded-3xl border border-dashed border-slate-200 bg-white p-12 text-center text-slate-400">
+                <Trophy className="h-10 w-10 mx-auto text-slate-300 mb-2" />
+                <p className="font-bold text-xs">Keep reading chapters to unlock your first trophy!</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {achievements.map(({ id, earnedAt, achievement }) => (
-                  <div
-                    key={id}
-                    className="rounded-3xl border border-slate-100 bg-white p-5 text-center shadow-soft-sm hover:shadow-soft-md hover:scale-[1.02] transition-all"
-                  >
-                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-gradient-to-tr from-amber-400 via-orange-400 to-pink-500 text-white shadow-soft-md mb-3">
-                      <Award className="h-8 w-8" />
-                    </div>
-                    <h5 className="font-extrabold text-sm text-slate-900">{achievement.title}</h5>
-                    <p className="text-xs text-slate-400 mt-1">{achievement.description}</p>
-                    <div className="mt-3 inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-[10px] font-bold text-amber-700 border border-amber-200/60">
-                      +{achievement.points} XP • {new Date(earnedAt).toLocaleDateString()}
-                    </div>
+              achievements.map((item) => (
+                <div
+                  key={item.id}
+                  className="rounded-3xl border border-purple-100 bg-white p-5 shadow-soft-sm hover:shadow-soft-md transition-all text-center space-y-3"
+                >
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-amber-100 to-amber-200 text-amber-600 mx-auto shadow-soft-xs">
+                    <Award className="h-7 w-7" />
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </main>
-
-      {/* ========================================================================= */}
-      {/* TOPIC DETAIL MODAL / DRAWER                                               */}
-      {/* ========================================================================= */}
-      {selectedTopicDetail && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-3xl border border-slate-100 bg-white p-6 shadow-soft-2xl animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
-              <div>
-                <span className="rounded-md bg-purple-100 px-2 py-0.5 text-[10px] font-bold text-purple-700">
-                  Topic Activities
-                </span>
-                <h3 className="font-extrabold text-lg text-slate-900 mt-1">{selectedTopicDetail.title}</h3>
-              </div>
-              <button
-                onClick={() => setSelectedTopicDetail(null)}
-                className="rounded-xl p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              {/* Reading Passage preview */}
-              {selectedTopicDetail.learningContent && (
-                <div className="rounded-2xl border border-blue-100 bg-blue-50/40 p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="flex items-center gap-1.5 text-xs font-bold text-blue-900">
-                      <FileText className="h-4 w-4 text-blue-600" /> Reading Passage
-                    </span>
-                    <button
-                      onClick={() => {
-                        setReadingTopic({
-                          id: selectedTopicDetail.id,
-                          title: selectedTopicDetail.title,
-                          content: selectedTopicDetail.learningContent || '',
-                        });
-                        setSelectedTopicDetail(null);
-                      }}
-                      className="text-xs font-bold text-blue-600 hover:underline"
-                    >
-                      Open Full Screen Reader →
-                    </button>
+                  <div>
+                    <h4 className="font-bold text-sm text-slate-900">{item.achievement.title}</h4>
+                    <p className="text-xs text-slate-500 mt-1">{item.achievement.description}</p>
                   </div>
-                  <div className="text-xs text-slate-600 line-clamp-3 leading-relaxed font-medium">
-                    {selectedTopicDetail.learningContent.replace(/<[^>]*>?/gm, '')}
-                  </div>
+                  <span className="inline-block rounded-full bg-amber-50 border border-amber-200 px-3 py-0.5 text-[10px] font-black text-amber-800">
+                    +{item.achievement.points} XP
+                  </span>
                 </div>
-              )}
-
-              {/* Lessons Available */}
-              <div className="space-y-2">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Lessons ({selectedTopicDetail.lessons.length})
-                </h4>
-                {selectedTopicDetail.lessons.length === 0 ? (
-                  <p className="text-xs text-slate-400">No lessons built for this topic yet.</p>
-                ) : (
-                  selectedTopicDetail.lessons.map((l) => (
-                    <div
-                      key={l.id}
-                      className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 p-3"
-                    >
-                      <div>
-                        <span className="font-bold text-xs text-slate-800">{l.title}</span>
-                        <p className="text-[10px] text-slate-400">~{l.estimatedMinutes || 15} mins</p>
-                      </div>
-                      <Link
-                        to={`/kids/lessons/${l.id}`}
-                        className="rounded-xl bg-purple-600 px-3 py-1.5 text-xs font-bold text-white shadow-soft-xs hover:bg-purple-700"
-                      >
-                        Play Lesson →
-                      </Link>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              {/* Quizzes Available */}
-              <div className="space-y-2">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Quizzes ({selectedTopicDetail.assessments.length})
-                </h4>
-                {selectedTopicDetail.assessments.length === 0 ? (
-                  <p className="text-xs text-slate-400">No quizzes built for this topic yet.</p>
-                ) : (
-                  selectedTopicDetail.assessments.map((a) => (
-                    <div
-                      key={a.id}
-                      className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 p-3"
-                    >
-                      <div>
-                        <span className="font-bold text-xs text-slate-800">{a.title}</span>
-                        <p className="text-[10px] text-slate-400">
-                          {a.questions?.length ?? 5} questions
-                        </p>
-                      </div>
-                      <Link
-                        to={`/kids/assessments/${a.id}`}
-                        className="rounded-xl bg-pink-600 px-3 py-1.5 text-xs font-bold text-white shadow-soft-xs hover:bg-pink-700"
-                      >
-                        Take Quiz →
-                      </Link>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* IMMERSIVE FOCUS READING MODAL                                             */}
-      {/* ========================================================================= */}
-      {readingTopic && (
-        <FocusReadingModal
-          topic={readingTopic}
-          onClose={() => setReadingTopic(null)}
-          onFinish={() => {
-            queryClient.invalidateQueries({ queryKey: ['kids-overview'] });
-            setReadingTopic(null);
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
-/* ======================================================================================= */
-/* FOCUS READING MODAL WITH TTS (READ ALOUD) & ZOOM                                       */
-/* ======================================================================================= */
-function FocusReadingModal({
-  topic,
-  onClose,
-  onFinish,
-}: {
-  topic: { id: number; title: string; content: string; subjectName?: string; subjectColor?: string };
-  onClose: () => void;
-  onFinish: () => void;
-}) {
-  const [fontSize, setFontSize] = useState<'normal' | 'large' | 'huge'>('large');
-  const [isSpeaking, setIsSpeaking] = useState(false);
-
-  const toggleSpeech = () => {
-    if (!('speechSynthesis' in window)) return;
-
-    if (isSpeaking) {
-      window.speechSynthesis.cancel();
-      setIsSpeaking(false);
-    } else {
-      const textToRead = topic.content.replace(/<[^>]*>?/gm, '');
-      const utterance = new SpeechSynthesisUtterance(textToRead);
-      utterance.rate = 0.9;
-      utterance.onend = () => setIsSpeaking(false);
-      utterance.onerror = () => setIsSpeaking(false);
-      window.speechSynthesis.speak(utterance);
-      setIsSpeaking(true);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 sm:p-6">
-      <div className="w-full max-w-3xl max-h-[90vh] flex flex-col rounded-3xl border border-slate-100 bg-white shadow-soft-2xl animate-in fade-in zoom-in-95 overflow-hidden">
-        {/* Reader Header */}
-        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 bg-slate-50/50">
-          <div className="flex items-center gap-3">
-            {topic.subjectName && (
-              <span
-                className="rounded-lg px-2.5 py-0.5 text-[10px] font-bold text-white shadow-soft-xs"
-                style={{ backgroundColor: topic.subjectColor || '#7928CA' }}
-              >
-                {topic.subjectName}
-              </span>
+              ))
             )}
-            <h3 className="font-extrabold text-sm text-slate-800 truncate max-w-md">{topic.title}</h3>
           </div>
-
-          <div className="flex items-center gap-2">
-            {/* Text to speech toggle */}
-            {'speechSynthesis' in window && (
-              <button
-                onClick={toggleSpeech}
-                className={`flex items-center gap-1 rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
-                  isSpeaking ? 'bg-purple-600 text-white' : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                }`}
-                title="Read Aloud Narration"
-              >
-                {isSpeaking ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
-                <span>{isSpeaking ? 'Stop Audio' : 'Read Aloud'}</span>
-              </button>
-            )}
-
-            {/* Font size zoom */}
-            <div className="flex items-center rounded-xl border border-slate-200 bg-white p-0.5 text-xs font-bold">
-              <button
-                onClick={() => setFontSize('normal')}
-                className={`px-2 py-1 rounded-lg ${fontSize === 'normal' ? 'bg-slate-200 text-slate-800' : 'text-slate-500'}`}
-              >
-                A
-              </button>
-              <button
-                onClick={() => setFontSize('large')}
-                className={`px-2 py-1 rounded-lg ${fontSize === 'large' ? 'bg-slate-200 text-slate-800' : 'text-slate-500'}`}
-              >
-                A+
-              </button>
-              <button
-                onClick={() => setFontSize('huge')}
-                className={`px-2 py-1 rounded-lg ${fontSize === 'huge' ? 'bg-slate-200 text-slate-800' : 'text-slate-500'}`}
-              >
-                A++
-              </button>
-            </div>
-
-            <button
-              onClick={onClose}
-              className="rounded-xl p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-        </div>
-
-        {/* Reader Body Content */}
-        <div className="flex-1 overflow-y-auto px-8 py-6">
-          <div
-            className={`prose prose-slate max-w-none leading-relaxed font-normal ${
-              fontSize === 'huge' ? 'text-xl' : fontSize === 'large' ? 'text-base' : 'text-sm'
-            }`}
-          >
-            <RichContent content={topic.content} />
-          </div>
-        </div>
-
-        {/* Reader Footer */}
-        <div className="flex items-center justify-between border-t border-slate-100 px-6 py-4 bg-slate-50/50">
-          <span className="text-xs font-bold text-slate-500">🌟 Great reading makes you smarter!</span>
-          <button
-            onClick={onFinish}
-            className="flex items-center gap-1.5 rounded-xl bg-gradient-to-tl from-purple-700 to-pink-500 px-5 py-2 text-xs font-bold text-white shadow-soft-xs hover:scale-[1.02] active:scale-[0.98] transition-all"
-          >
-            <CheckCircle2 className="h-4 w-4" />
-            <span>Finish Reading (+10 XP)</span>
-          </button>
-        </div>
-      </div>
+        </main>
+      )}
     </div>
   );
 }
