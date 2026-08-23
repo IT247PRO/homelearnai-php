@@ -439,7 +439,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </header>
 
         {/* Page Content */}
-        <main className="mx-auto max-w-7xl">{children}</main>
+        <main className="w-full">{children}</main>
       </div>
     </div>
   );

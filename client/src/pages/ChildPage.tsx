@@ -22,6 +22,10 @@ import {
   Printer,
   Compass,
   GraduationCap,
+  Maximize2,
+  Minimize2,
+  Columns,
+  LayoutGrid,
 } from 'lucide-react';
 import { AppLayout } from '../components/AppLayout';
 import { ChildNavHeader } from '../components/ChildNavHeader';
@@ -102,6 +106,9 @@ export default function ChildPage() {
   const [selectedTopicId, setSelectedTopicId] = useState<number | null>(null);
   const [topicSearch, setTopicSearch] = useState('');
 
+  // Layout mode: 'standard' (3 cols) | 'expanded' (Left + Wide Middle) | 'focus' (Full Width Studio)
+  const [layoutMode, setLayoutMode] = useState<'standard' | 'expanded' | 'focus'>('standard');
+
   // Middle tab selection: 'materials' | 'lessons' | 'flashcards'
   const [middleTab, setMiddleTab] = useState<'materials' | 'lessons' | 'flashcards'>('materials');
 
@@ -130,37 +137,108 @@ export default function ChildPage() {
     <AppLayout>
       <ChildNavHeader childId={id} activeTab="curriculum" />
 
+      {/* Quick Layout Mode Switcher Toolbar */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white px-4 py-2.5 shadow-soft-sm">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Workspace Layout:</span>
+          <div className="inline-flex rounded-xl bg-slate-100 p-1">
+            <button
+              onClick={() => setLayoutMode('standard')}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-bold transition-all ${
+                layoutMode === 'standard'
+                  ? 'bg-white text-purple-700 shadow-soft-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+              title="3-Column Balanced Layout"
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+              <span>3-Column Studio</span>
+            </button>
+            <button
+              onClick={() => setLayoutMode('expanded')}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-bold transition-all ${
+                layoutMode === 'expanded'
+                  ? 'bg-white text-purple-700 shadow-soft-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+              title="Expanded Reading & Lessons Studio"
+            >
+              <Columns className="h-3.5 w-3.5" />
+              <span>Expanded Studio</span>
+            </button>
+            <button
+              onClick={() => setLayoutMode('focus')}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-bold transition-all ${
+                layoutMode === 'focus'
+                  ? 'bg-white text-purple-700 shadow-soft-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+              title="Full-Width Focus Reader"
+            >
+              <Maximize2 className="h-3.5 w-3.5" />
+              <span>Full Screen Focus</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {layoutMode === 'focus' && (
+            <button
+              onClick={() => setLayoutMode('standard')}
+              className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+            >
+              <Minimize2 className="h-3.5 w-3.5" />
+              <span>Show Sidebars</span>
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* 3-Column Interactive Learning Studio */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* ========================================================================= */}
         {/* LEFT COLUMN: Course & Curriculum Hierarchy (Subjects, Units, Topics)       */}
         {/* ========================================================================= */}
-        <div className="space-y-4 lg:col-span-4 xl:col-span-3">
-          <LeftCurriculumNavigator
-            childId={id}
-            subjects={subjectsQuery.data ?? []}
-            activeSubjectId={selectedSubjectId}
-            onSelectSubject={(subjectId) => {
-              setSelectedSubjectId(subjectId);
-              setSelectedUnitId(null);
-              setSelectedTopicId(null);
-            }}
-            selectedUnitId={selectedUnitId}
-            onSelectUnit={setSelectedUnitId}
-            selectedTopicId={selectedTopicId}
-            onSelectTopic={(topicId, unitId) => {
-              setSelectedTopicId(topicId);
-              if (unitId) setSelectedUnitId(unitId);
-            }}
-            searchQuery={topicSearch}
-            onSearchChange={setTopicSearch}
-          />
-        </div>
+        {layoutMode !== 'focus' && (
+          <div
+            className={`space-y-4 ${
+              layoutMode === 'expanded' ? 'lg:col-span-4 xl:col-span-3' : 'lg:col-span-4 xl:col-span-3'
+            }`}
+          >
+            <LeftCurriculumNavigator
+              childId={id}
+              subjects={subjectsQuery.data ?? []}
+              activeSubjectId={selectedSubjectId}
+              onSelectSubject={(subjectId) => {
+                setSelectedSubjectId(subjectId);
+                setSelectedUnitId(null);
+                setSelectedTopicId(null);
+              }}
+              selectedUnitId={selectedUnitId}
+              onSelectUnit={setSelectedUnitId}
+              selectedTopicId={selectedTopicId}
+              onSelectTopic={(topicId, unitId) => {
+                setSelectedTopicId(topicId);
+                if (unitId) setSelectedUnitId(unitId);
+              }}
+              searchQuery={topicSearch}
+              onSearchChange={setTopicSearch}
+            />
+          </div>
+        )}
 
         {/* ========================================================================= */}
         {/* MIDDLE COLUMN: Active Topic Learning Studio (Materials, Lessons, Cards)   */}
         {/* ========================================================================= */}
-        <div className="space-y-4 lg:col-span-8 xl:col-span-5">
+        <div
+          className={`space-y-4 ${
+            layoutMode === 'focus'
+              ? 'col-span-12'
+              : layoutMode === 'expanded'
+              ? 'lg:col-span-8 xl:col-span-9'
+              : 'lg:col-span-8 xl:col-span-5'
+          }`}
+        >
           <MiddleTopicStudio
             childId={id}
             selectedTopicId={selectedTopicId}
@@ -168,20 +246,29 @@ export default function ChildPage() {
             activeTab={middleTab}
             onChangeTab={setMiddleTab}
             onSelectTopic={setSelectedTopicId}
+            layoutMode={layoutMode}
+            onToggleExpand={() =>
+              setLayoutMode(layoutMode === 'expanded' ? 'standard' : 'expanded')
+            }
+            onToggleFocus={() =>
+              setLayoutMode(layoutMode === 'focus' ? 'standard' : 'focus')
+            }
           />
         </div>
 
         {/* ========================================================================= */}
         {/* RIGHT COLUMN: AI Co-Pilot, Tutor, Insights & Mastery Operations           */}
         {/* ========================================================================= */}
-        <div className="space-y-4 lg:col-span-12 xl:col-span-4">
-          <RightAICompanionHub
-            childId={id}
-            selectedTopicId={selectedTopicId}
-            activeTab={rightTab}
-            onChangeTab={setRightTab}
-          />
-        </div>
+        {layoutMode === 'standard' && (
+          <div className="space-y-4 lg:col-span-12 xl:col-span-4">
+            <RightAICompanionHub
+              childId={id}
+              selectedTopicId={selectedTopicId}
+              activeTab={rightTab}
+              onChangeTab={setRightTab}
+            />
+          </div>
+        )}
       </div>
     </AppLayout>
   );
@@ -685,6 +772,9 @@ interface MiddleTopicStudioProps {
   activeTab: 'materials' | 'lessons' | 'flashcards';
   onChangeTab: (tab: 'materials' | 'lessons' | 'flashcards') => void;
   onSelectTopic: (id: number | null) => void;
+  layoutMode?: 'standard' | 'expanded' | 'focus';
+  onToggleExpand?: () => void;
+  onToggleFocus?: () => void;
 }
 
 function MiddleTopicStudio({
@@ -694,6 +784,9 @@ function MiddleTopicStudio({
   activeTab,
   onChangeTab,
   onSelectTopic,
+  layoutMode = 'standard',
+  onToggleExpand,
+  onToggleFocus,
 }: MiddleTopicStudioProps) {
   const queryClient = useQueryClient();
   const [scheduleDate, setScheduleDate] = useState('');
@@ -860,7 +953,7 @@ function MiddleTopicStudio({
             )}
           </div>
 
-          {/* Quick Schedule Trigger */}
+          {/* Quick Actions and Layout Controls */}
           <div className="flex items-center gap-2">
             <input
               type="date"
@@ -876,6 +969,26 @@ function MiddleTopicStudio({
               <Calendar className="h-3.5 w-3.5" />
               <span>{scheduleSuccess ? 'Scheduled ✓' : 'Add to Plan'}</span>
             </button>
+
+            {onToggleExpand && (
+              <button
+                onClick={onToggleExpand}
+                className="rounded-xl border border-slate-200 bg-slate-50 p-2 text-slate-600 hover:bg-slate-100 transition-colors"
+                title={layoutMode === 'expanded' ? 'Collapse to 3 columns' : 'Expand studio width'}
+              >
+                {layoutMode === 'expanded' ? <Minimize2 className="h-4 w-4" /> : <Columns className="h-4 w-4" />}
+              </button>
+            )}
+
+            {onToggleFocus && (
+              <button
+                onClick={onToggleFocus}
+                className="rounded-xl border border-slate-200 bg-slate-50 p-2 text-slate-600 hover:bg-slate-100 transition-colors"
+                title={layoutMode === 'focus' ? 'Exit full screen' : 'Full width reading focus'}
+              >
+                <Maximize2 className="h-4 w-4" />
+              </button>
+            )}
           </div>
         </div>
 

@@ -19,7 +19,179 @@ router.get('/me', async (req, res, next) => {
   try {
     const child = await prisma.child.findUnique({ where: { id: req.kidsSession!.childId } });
     if (!child) throw new HttpError(404, 'not_found');
-    res.json({ data: { id: child.id, name: child.name, grade: child.grade, independenceLevel: child.independenceLevel } });
+    res.json({ data: { id: child.id, name: child.name, grade: child.grade, independenceLevel: child.independenceLevel, avatarUrl: child.avatarUrl } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/overview', async (req, res, next) => {
+  try {
+    const childId = req.kidsSession!.childId;
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const [child, gamification, achievements, sessions, reviewQueue, subjects] = await Promise.all([
+      prisma.child.findUnique({ where: { id: childId } }),
+      prisma.childGamificationState.findUnique({ where: { childId } }),
+      prisma.childAchievement.findMany({
+        where: { childId },
+        include: { achievement: true },
+        orderBy: { earnedAt: 'desc' },
+      }),
+      prisma.learningSession.findMany({
+        where: {
+          childId,
+          status: { in: ['planned', 'scheduled', 'done'] },
+          OR: [{ scheduledDate: { gte: startOfDay, lte: endOfDay } }, { scheduledDate: null }],
+        },
+        include: {
+          topic: {
+            include: {
+              unit: { include: { subject: true } },
+              lessons: { select: { id: true, title: true, status: true, estimatedMinutes: true } },
+              assessments: { select: { id: true, title: true } },
+            },
+          },
+          lesson: { select: { id: true, title: true, status: true } },
+        },
+        orderBy: [{ scheduledStartTime: 'asc' }, { createdAt: 'asc' }],
+      }),
+      buildReviewQueue(childId),
+      prisma.subject.findMany({
+        where: { childId },
+        include: {
+          units: {
+            orderBy: { sortOrder: 'asc' },
+            include: {
+              topics: {
+                orderBy: { sortOrder: 'asc' },
+                include: {
+                  lessons: {
+                    select: {
+                      id: true,
+                      title: true,
+                      status: true,
+                      estimatedMinutes: true,
+                      progress: { where: { childId }, select: { completedAt: true, currentSectionIndex: true } },
+                    },
+                  },
+                  assessments: {
+                    select: {
+                      id: true,
+                      title: true,
+                      questions: { select: { id: true } },
+                      attempts: {
+                        where: { childId },
+                        orderBy: { completedAt: 'desc' },
+                        take: 1,
+                        select: { id: true, score: true, status: true, completedAt: true },
+                      },
+                    },
+                  },
+                  flashcards: { select: { id: true } },
+                  fileAssets: { select: { id: true, kind: true, label: true, originalName: true, url: true } },
+                  masteries: { where: { childId }, select: { state: true, accuracy: true } },
+                },
+              },
+            },
+          },
+        },
+      }),
+    ]);
+
+    if (!child) throw new HttpError(404, 'not_found');
+
+    res.json({
+      data: {
+        child: {
+          id: child.id,
+          name: child.name,
+          grade: child.grade,
+          independenceLevel: child.independenceLevel,
+          avatarUrl: child.avatarUrl,
+        },
+        gamification: gamification ?? {
+          totalPoints: 0,
+          level: 1,
+          currentStreakDays: 0,
+          longestStreakDays: 0,
+          gamificationEnabled: true,
+        },
+        achievements,
+        todaySessions: sessions,
+        reviewQueueCount: reviewQueue.length,
+        subjects,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/gamification', async (req, res, next) => {
+  try {
+    const childId = req.kidsSession!.childId;
+    const [state, achievements] = await Promise.all([
+      prisma.childGamificationState.findUnique({ where: { childId } }),
+      prisma.childAchievement.findMany({
+        where: { childId },
+        include: { achievement: true },
+        orderBy: { earnedAt: 'desc' },
+      }),
+    ]);
+    res.json({ data: { state, achievements } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/subjects', async (req, res, next) => {
+  try {
+    const childId = req.kidsSession!.childId;
+    const subjects = await prisma.subject.findMany({
+      where: { childId },
+      include: {
+        units: {
+          orderBy: { sortOrder: 'asc' },
+          include: {
+            topics: {
+              orderBy: { sortOrder: 'asc' },
+              include: {
+                lessons: {
+                  select: {
+                    id: true,
+                    title: true,
+                    status: true,
+                    estimatedMinutes: true,
+                    progress: { where: { childId }, select: { completedAt: true, currentSectionIndex: true } },
+                  },
+                },
+                assessments: {
+                  select: {
+                    id: true,
+                    title: true,
+                    questions: { select: { id: true } },
+                    attempts: {
+                      where: { childId },
+                      orderBy: { completedAt: 'desc' },
+                      take: 1,
+                      select: { id: true, score: true, status: true },
+                    },
+                  },
+                },
+                flashcards: { select: { id: true } },
+                fileAssets: { select: { id: true, kind: true, label: true, originalName: true, url: true } },
+                masteries: { where: { childId }, select: { state: true, accuracy: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+    res.json({ data: subjects });
   } catch (err) {
     next(err);
   }
@@ -105,12 +277,69 @@ router.post('/reviews/:reviewId/result', async (req, res, next) => {
 router.get('/topics/:topicId', async (req, res, next) => {
   try {
     const topicId = Number(req.params.topicId);
+    const childId = req.kidsSession!.childId;
+    const topic = await prisma.topic.findUnique({
+      where: { id: topicId },
+      include: {
+        unit: { include: { subject: true } },
+        fileAssets: true,
+        lessons: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            estimatedMinutes: true,
+            progress: { where: { childId }, select: { completedAt: true, currentSectionIndex: true } },
+          },
+        },
+        assessments: {
+          select: {
+            id: true,
+            title: true,
+            questions: { select: { id: true } },
+            attempts: {
+              where: { childId },
+              orderBy: { completedAt: 'desc' },
+              take: 1,
+              select: { id: true, score: true, status: true, completedAt: true },
+            },
+          },
+        },
+        flashcards: { select: { id: true } },
+      },
+    });
+    if (!topic || topic.unit.subject.childId !== req.kidsSession!.childId) throw new HttpError(404, 'not_found');
+    res.json({
+      data: {
+        id: topic.id,
+        title: topic.title,
+        learningContent: topic.learningContent,
+        estimatedMinutes: topic.estimatedMinutes,
+        unit: { id: topic.unit.id, name: topic.unit.name, subject: topic.unit.subject },
+        fileAssets: topic.fileAssets,
+        lessons: topic.lessons,
+        assessments: topic.assessments,
+        flashcardsCount: topic.flashcards.length,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/topics/:topicId/materials', async (req, res, next) => {
+  try {
+    const topicId = Number(req.params.topicId);
     const topic = await prisma.topic.findUnique({
       where: { id: topicId },
       include: { unit: { include: { subject: true } } },
     });
     if (!topic || topic.unit.subject.childId !== req.kidsSession!.childId) throw new HttpError(404, 'not_found');
-    res.json({ data: { id: topic.id, title: topic.title, learningContent: topic.learningContent, estimatedMinutes: topic.estimatedMinutes } });
+    const materials = await prisma.fileAsset.findMany({
+      where: { topicId },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json({ data: materials });
   } catch (err) {
     next(err);
   }
