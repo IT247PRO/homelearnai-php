@@ -20,5 +20,6 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
   }
 
   console.error(err);
-  return res.status(500).json({ error: 'internal_server_error' });
+  const message = (err as Error)?.message || 'internal_server_error';
+  return res.status(500).json({ error: 'internal_server_error', message, details: (err as Error)?.stack });
 }

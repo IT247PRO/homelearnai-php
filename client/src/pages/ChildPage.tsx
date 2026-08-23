@@ -36,6 +36,7 @@ import { MasterySection } from '../components/MasterySection';
 import { LearningProfileSection } from '../components/LearningProfileSection';
 import { InsightsSection } from '../components/InsightsSection';
 import { TutorChat } from '../components/TutorChat';
+import { WorksheetModal } from '../components/WorksheetModal';
 import { api } from '../lib/api';
 
 interface Subject {
@@ -795,6 +796,7 @@ function MiddleTopicStudio({
   const [editTitle, setEditTitle] = useState('');
   const [editMinutes, setEditMinutes] = useState(30);
   const [scheduleSuccess, setScheduleSuccess] = useState(false);
+  const [showWorksheetModal, setShowWorksheetModal] = useState(false);
 
   // Fetch topic details if selected
   const topicQuery = useQuery({
@@ -956,6 +958,16 @@ function MiddleTopicStudio({
 
           {/* Quick Actions and Layout Controls */}
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowWorksheetModal(true)}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-purple-200 bg-purple-50/80 px-3 py-1.5 text-xs font-bold text-purple-700 hover:bg-purple-100 hover:border-purple-300 shadow-soft-xs transition-all"
+              title="Generate printable practice worksheet with math preservation"
+            >
+              <Printer className="h-3.5 w-3.5" />
+              <span>Print Worksheet</span>
+            </button>
+
             <input
               type="date"
               value={scheduleDate}
@@ -1051,6 +1063,17 @@ function MiddleTopicStudio({
         {activeTab === 'flashcards' && <MiddleFlashcardsTab topicId={selectedTopicId} />}
         {activeTab === 'study-guide' && <StudyGuideSection topicId={selectedTopicId} />}
       </div>
+
+      {/* Quick Worksheet Modal */}
+      {showWorksheetModal && (
+        <WorksheetModal
+          isOpen={true}
+          onClose={() => setShowWorksheetModal(false)}
+          topicId={selectedTopicId}
+          childId={childId}
+          defaultTitle={topic?.title}
+        />
+      )}
     </div>
   );
 }
@@ -1508,8 +1531,12 @@ function MiddleFlashcardsTab({ topicId }: { topicId: number }) {
               <span className="inline-block rounded-md bg-purple-100 px-1.5 py-0.5 text-[10px] font-bold text-purple-700 uppercase tracking-wider">
                 {card.cardType.replace('_', ' ')}
               </span>
-              <p className="font-bold text-xs text-slate-800">{card.question}</p>
-              <p className="text-xs text-slate-500">{card.answer}</p>
+              <div className="font-bold text-xs text-slate-800">
+                <RichContent content={card.question} />
+              </div>
+              <div className="text-xs text-slate-500">
+                <RichContent content={card.answer} />
+              </div>
             </div>
             <button
               onClick={() => deleteCard.mutate(card.id)}

@@ -28,8 +28,10 @@ import * as curricula from './curricula.js';
 import * as curriculumStructure from './curriculumStructure.js';
 import { router as kidsLessonsRouter } from './kidsLessons.js';
 import { router as studyGuideRouter } from './studyGuide.js';
+import worksheetsRouter from './worksheets.js';
 
 export const router = Router();
+
 
 router.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
@@ -97,3 +99,5 @@ router.use('/curriculum-topics', curricula.topicLessonRouter);
 router.use('/curriculum-skills', curriculumStructure.skillItemRouter);
 router.use('/curriculum-objectives', curriculumStructure.objectiveItemRouter);
 router.use('/curriculum-prerequisites', curriculumStructure.prerequisiteItemRouter);
+router.use('/', worksheetsRouter);
+

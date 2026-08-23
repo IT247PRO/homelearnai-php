@@ -187,10 +187,12 @@ export default function KidsStudyGuidePage() {
                             return next;
                           })
                         }
-                        className={`min-h-[100px] cursor-pointer rounded-xl border p-3.5 text-center transition-all ${flipped ? 'border-indigo-300 bg-indigo-50' : 'border-slate-200 bg-slate-50'}`}
+                        className={`min-h-[100px] cursor-pointer rounded-xl border p-3.5 text-center flex flex-col justify-center items-center transition-all ${flipped ? 'border-indigo-300 bg-indigo-50' : 'border-slate-200 bg-slate-50'}`}
                       >
                         <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">{flipped ? 'Meaning' : 'Term'}</p>
-                        <p className="font-semibold text-slate-800">{flipped ? term.childFriendlyExplanation || term.definition : term.term}</p>
+                        <div className="font-semibold text-slate-800 text-center">
+                          <RichContent content={flipped ? term.childFriendlyExplanation || term.definition : term.term} />
+                        </div>
                       </div>
                     );
                   })}
@@ -206,9 +208,14 @@ export default function KidsStudyGuidePage() {
                     const revealed = revealedQuestions.has(i);
                     return (
                       <div key={i} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                        <p className="font-medium text-slate-800">{q.question}</p>
+                        <div className="font-medium text-slate-800">
+                          <RichContent content={q.question} />
+                        </div>
                         {revealed ? (
-                          <p className="mt-2 text-sm text-emerald-700">{q.answer}</p>
+                          <div className="mt-2 border-t border-slate-200 pt-2 text-sm text-emerald-700">
+                            <p className="text-[10px] font-bold uppercase text-emerald-600 mb-0.5">Answer</p>
+                            <RichContent content={q.answer} />
+                          </div>
                         ) : (
                           <button
                             onClick={() => setRevealedQuestions((prev) => new Set(prev).add(i))}

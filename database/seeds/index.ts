@@ -122,16 +122,27 @@ async function main() {
       email: 'demo@example.com',
       passwordHash,
       kidsModeSettings: { create: {} },
-      familyAiSettings: { create: { aiEnabled: false } },
+      familyAiSettings: { create: { aiEnabled: true, tutorEnabled: true, contentGenerationEnabled: true } },
     },
   });
 
-  const children = [
+  const childrenNames = [
     { name: 'Ava', grade: '3rd', independenceLevel: 2 },
     { name: 'Liam', grade: 'PreK', independenceLevel: 1 },
+    { name: 'Emma', grade: '1st', independenceLevel: 1 },
+    { name: 'Noah', grade: '2nd', independenceLevel: 2 },
+    { name: 'Oliver', grade: '4th', independenceLevel: 3 },
+    { name: 'Sophia', grade: '5th', independenceLevel: 3 },
+    { name: 'Jackson', grade: '6th', independenceLevel: 3 },
+    { name: 'Mia', grade: '7th', independenceLevel: 4 },
+    { name: 'Lucas', grade: '8th', independenceLevel: 4 },
+    { name: 'Isabella', grade: '3rd', independenceLevel: 2 },
+    { name: 'Mason', grade: '4th', independenceLevel: 3 },
+    { name: 'Harper', grade: '5th', independenceLevel: 3 },
+    { name: 'Ethan', grade: '4th', independenceLevel: 3 }, // Child ID 13
   ];
 
-  for (const childData of children) {
+  for (const childData of childrenNames) {
     const child =
       (await prisma.child.findFirst({ where: { userId: user.id, name: childData.name } })) ??
       (await prisma.child.create({
@@ -175,7 +186,251 @@ async function main() {
     }
   }
 
-  console.log(`Seeded demo user ${user.email} with ${children.length} children and default PreK-12 subjects.`);
+  // Ensure curriculum 4 and other sample curricula exist
+  const existingCurriculaCount = await prisma.curriculum.count({ where: { userId: user.id } });
+  if (existingCurriculaCount < 4) {
+    const sampleCurricula = [
+      {
+        title: 'Kindergarten Early Math & Phonics',
+        subjectArea: 'Mathematics',
+        gradeLevel: 'K',
+        schoolYear: '2026-2027',
+        status: 'ready',
+        masteryThresholdPercent: 80,
+      },
+      {
+        title: '3rd Grade Life Science & Ecosystems',
+        subjectArea: 'Science',
+        gradeLevel: '3rd',
+        schoolYear: '2026-2027',
+        status: 'ready',
+        masteryThresholdPercent: 75,
+      },
+      {
+        title: 'Middle School World History & Geography',
+        subjectArea: 'Social Studies',
+        gradeLevel: '6th',
+        schoolYear: '2026-2027',
+        status: 'outline_generated',
+        masteryThresholdPercent: 70,
+      },
+      {
+        title: '4th Grade Mathematics & STEM Mastery',
+        subjectArea: 'Mathematics',
+        gradeLevel: '4th',
+        schoolYear: '2026-2027',
+        status: 'ready',
+        masteryThresholdPercent: 85,
+      },
+    ];
+
+    for (let i = existingCurriculaCount; i < sampleCurricula.length; i++) {
+      const cData = sampleCurricula[i];
+      const createdCurriculum = await prisma.curriculum.create({
+        data: {
+          userId: user.id,
+          title: cData.title,
+          subjectArea: cData.subjectArea,
+          gradeLevel: cData.gradeLevel,
+          schoolYear: cData.schoolYear,
+          status: cData.status,
+          masteryThresholdPercent: cData.masteryThresholdPercent,
+          sourceType: 'pasted_text',
+          sourceName: 'National Math & STEM Standards Curriculum Guide',
+          rawText: 'Comprehensive mathematics curriculum covering fractions, decimals, algebraic thinking, geometric measurement, area and perimeter, with deep conceptual understanding and problem solving.',
+        },
+      });
+
+      // Populate rich units & topics for the 4th grade math curriculum
+      if (cData.title.includes('Mathematics')) {
+        const u1 = await prisma.curriculumUnit.create({
+          data: {
+            curriculumId: createdCurriculum.id,
+            title: 'Unit 1: Fractions & Decimals Foundations',
+            description: 'Understanding equivalent fractions, addition & subtraction with like/unlike denominators, and decimal notation.',
+            confidence: 'explicit',
+            sortOrder: 0,
+          },
+        });
+
+        const t1 = await prisma.curriculumTopic.create({
+          data: {
+            curriculumUnitId: u1.id,
+            title: 'Equivalent Fractions & Simplification',
+            description: 'Understand why fractions such as $\\frac{2}{4}$ and $\\frac{1}{2}$ represent the same value using area models and number lines.',
+            confidence: 'explicit',
+            estimatedLessonCount: 3,
+            lessonPlanStatus: 'generated',
+            sortOrder: 0,
+            objectives: {
+              create: [
+                { description: 'Model equivalent fractions visually using fraction bars and circle models.' },
+                { description: 'Multiply numerator and denominator by the same non-zero number to find equivalent fractions: $\\frac{a}{b} = \\frac{a \\times k}{b \\times k}$.' },
+                { description: 'Simplify fractions to simplest form by finding the greatest common factor (GCF).' },
+              ],
+            },
+            skills: {
+              create: [
+                { title: 'Fraction Equivalence & Comparison' },
+                { title: 'Simplifying Algebraic & Numerical Fractions' },
+              ],
+            },
+            lessons: {
+              create: [
+                {
+                  title: 'Visualizing Fraction Equivalence',
+                  lessonType: 'concept_introduction',
+                  estimatedMinutes: 20,
+                  sequenceNumber: 1,
+                  sections: {
+                    create: [
+                      {
+                        kind: 'instruction',
+                        content: '### What Are Equivalent Fractions?\n\nTwo fractions are **equivalent** if they represent the same amount of a whole or the exact same point on a number line.\n\n$$\\frac{1}{2} = \\frac{2}{4} = \\frac{4}{8} = \\frac{50}{100}$$\n\nWhen we multiply or divide both the **numerator** (top number) and the **denominator** (bottom number) by the same non-zero integer $k$, the value of the fraction does not change:\n\n$$\\frac{a}{b} = \\frac{a \\cdot k}{b \\cdot k}$$',
+                        sortOrder: 0,
+                      },
+                      {
+                        kind: 'example',
+                        content: '### Worked Example\n\nFind a fraction equivalent to $\\frac{3}{5}$ with a denominator of $20$.\n\n**Step 1:** Determine what number multiplies $5$ to get $20$:\n$$20 \\div 5 = 4$$\n\n**Step 2:** Multiply both top and bottom by $4$:\n$$\\frac{3 \\times 4}{5 \\times 4} = \\frac{12}{20}$$\n\nSo $\\frac{3}{5}$ is equivalent to $\\frac{12}{20}$.',
+                        sortOrder: 1,
+                      },
+                      {
+                        kind: 'practice',
+                        content: 'Which fraction is equivalent to $\\frac{2}{3}$?',
+                        interactionType: 'multiple_choice',
+                        choices: ['$\\frac{4}{6}$', '$\\frac{3}{4}$', '$\\frac{5}{6}$', '$\\frac{4}{9}$'],
+                        correctAnswer: '$\\frac{4}{6}$',
+                        hints: ['Multiply both numerator and denominator by 2.', '$\\frac{2 \\times 2}{3 \\times 2} = \\frac{4}{6}$'],
+                        sortOrder: 2,
+                      },
+                    ],
+                  },
+                },
+                {
+                  title: 'Adding and Subtracting Fractions with Like Denominators',
+                  lessonType: 'guided_practice',
+                  estimatedMinutes: 25,
+                  sequenceNumber: 2,
+                  sections: {
+                    create: [
+                      {
+                        kind: 'instruction',
+                        content: '### Adding and Subtracting Like Fractions\n\nWhen denominators are the same, we simply add or subtract the numerators and keep the denominator constant:\n\n$$\\frac{a}{c} + \\frac{b}{c} = \\frac{a + b}{c}$$\n$$\\frac{a}{c} - \\frac{b}{c} = \\frac{a - b}{c}$$',
+                        sortOrder: 0,
+                      },
+                      {
+                        kind: 'example',
+                        content: 'Calculate:\n$$\\frac{3}{8} + \\frac{2}{8} = \\frac{3 + 2}{8} = \\frac{5}{8}$$',
+                        sortOrder: 1,
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+            assessment: {
+              create: {
+                title: 'Fractions Equivalence & Operations Mastery Quiz',
+                questions: {
+                  create: [
+                    {
+                      type: 'multiple_choice',
+                      prompt: 'Simplify the fraction $\\frac{18}{24}$ to its lowest terms.',
+                      difficultyLevel: 'medium',
+                      choices: ['$\\frac{3}{4}$', '$\\frac{9}{12}$', '$\\frac{6}{8}$', '$\\frac{2}{3}$'],
+                      correctAnswer: '$\\frac{3}{4}$',
+                    },
+                    {
+                      type: 'multiple_choice',
+                      prompt: 'Compute: $\\frac{5}{12} + \\frac{3}{12} = \\text{?}$',
+                      difficultyLevel: 'easy',
+                      choices: ['$\\frac{2}{3}$', '$\\frac{8}{24}$', '$\\frac{8}{12}$', '$\\frac{1}{2}$'],
+                      correctAnswer: '$\\frac{2}{3}$',
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        });
+
+        const t2 = await prisma.curriculumTopic.create({
+          data: {
+            curriculumUnitId: u1.id,
+            title: 'Converting Decimals and Fractions',
+            description: 'Relating tenths and hundredths to decimal notation, e.g. $\\frac{7}{10} = 0.7$ and $\\frac{45}{100} = 0.45$.',
+            confidence: 'explicit',
+            estimatedLessonCount: 2,
+            lessonPlanStatus: 'generated',
+            sortOrder: 1,
+            objectives: {
+              create: [
+                { description: 'Express a fraction with denominator 10 as an equivalent fraction with denominator 100.' },
+                { description: 'Use decimal notation for fractions with denominators 10 or 100 ($0.62 = \\frac{62}{100}$).' },
+              ],
+            },
+            prerequisites: {
+              create: [
+                { requiresTopicId: t1.id },
+              ],
+            },
+          },
+        });
+
+        const u2 = await prisma.curriculumUnit.create({
+          data: {
+            curriculumId: createdCurriculum.id,
+            title: 'Unit 2: Algebraic Thinking & Number Patterns',
+            description: 'Equations with unknown variables, factor pairs, multiples, and arithmetic rules.',
+            confidence: 'explicit',
+            sortOrder: 1,
+          },
+        });
+
+        await prisma.curriculumTopic.create({
+          data: {
+            curriculumUnitId: u2.id,
+            title: 'Solving Single-Variable Equations',
+            description: 'Solve multi-step equations involving unknown quantities such as $3x + 7 = 22$.',
+            confidence: 'inferred',
+            estimatedLessonCount: 3,
+            lessonPlanStatus: 'generated',
+            sortOrder: 0,
+            objectives: {
+              create: [
+                { description: 'Use inverse operations to isolate the variable $x$.' },
+                { description: 'Verify solutions by substituting the computed value back into the original equation.' },
+              ],
+            },
+          },
+        });
+
+        const u3 = await prisma.curriculumUnit.create({
+          data: {
+            curriculumId: createdCurriculum.id,
+            title: 'Unit 3: Geometry, Measurement & Area',
+            description: 'Angles, perimeter $P = 2(l + w)$, area $A = l \\times w$, and coordinate grids.',
+            confidence: 'explicit',
+            sortOrder: 2,
+          },
+        });
+
+        await prisma.curriculumTopic.create({
+          data: {
+            curriculumUnitId: u3.id,
+            title: 'Perimeter and Area of Rectilinear Figures',
+            description: 'Apply area formulas $A = l \\cdot w$ and perimeter formulas $P = 2l + 2w$ to real-world word problems.',
+            confidence: 'explicit',
+            estimatedLessonCount: 2,
+            lessonPlanStatus: 'generated',
+            sortOrder: 0,
+          },
+        });
+      }
+    }
+  }
+
+  console.log(`Seeded demo user ${user.email} with ${childrenNames.length} children and default PreK-12 subjects.`);
 }
 
 main()

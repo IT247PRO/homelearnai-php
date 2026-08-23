@@ -280,3 +280,46 @@ export const studyGuideGenerationSchema = z.object({
   reviewQuestions: z.array(studyGuideReviewQuestionSchema).max(20).optional(),
 });
 export type StudyGuideGeneration = z.infer<typeof studyGuideGenerationSchema>;
+
+// ---------------------------------------------------------------------------
+// Printable Practice Worksheet generation schema
+// Ensures mathematical notation, problem counts, choices, step-by-step solutions
+// and answer keys are fully structured and preserved with LaTeX ($...$).
+// ---------------------------------------------------------------------------
+
+export const worksheetProblemSchema = z.object({
+  problemNumber: z.number().int().min(1),
+  question: z.string().min(1).max(5000),
+  type: z.enum(['calculation', 'word_problem', 'step_by_step', 'fill_blank', 'multiple_choice', 'conceptual']).default('calculation'),
+  workspaceSize: z.enum(['small', 'medium', 'large']).default('medium'),
+  choices: z.array(z.string().max(500)).max(6).optional(),
+  hint: z.string().max(1000).optional(),
+  solution: z.string().min(1).max(5000),
+  answer: z.string().min(1).max(1000),
+});
+
+export const worksheetGenerationSchema = z.object({
+  title: z.string().min(1).max(255),
+  subtitle: z.string().max(255).optional(),
+  gradeLevel: z.string().max(50).optional(),
+  subject: z.string().max(100).optional(),
+  instructions: z.string().min(1).max(2000),
+  estimatedMinutes: z.number().int().min(5).max(180).optional(),
+  problems: z.array(worksheetProblemSchema).min(1).max(50),
+  parentTeacherNotes: z.string().max(2000).optional(),
+});
+
+export type WorksheetProblem = z.infer<typeof worksheetProblemSchema>;
+export type WorksheetGeneration = z.infer<typeof worksheetGenerationSchema>;
+
+export const worksheetGenerationRequestSchema = z.object({
+  problemCount: z.number().int().min(1).max(50).default(10),
+  difficulty: z.enum(['foundation', 'standard', 'challenge']).default('standard'),
+  practiceType: z.enum(['mixed', 'step_by_step', 'drill', 'word_problems', 'conceptual']).default('mixed'),
+  includeAnswerKey: z.boolean().default(true),
+  childName: z.string().max(100).optional(),
+  customInstructions: z.string().max(1000).optional(),
+});
+
+export type WorksheetGenerationRequest = z.infer<typeof worksheetGenerationRequestSchema>;
+

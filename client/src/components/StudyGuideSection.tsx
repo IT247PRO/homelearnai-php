@@ -237,7 +237,9 @@ export function StudyGuideSection({ topicId }: { topicId: number }) {
             <p className="mb-2 text-xs font-bold uppercase tracking-wide text-indigo-600">Learning Objectives</p>
             <ul className="list-disc space-y-1 pl-5 text-sm text-slate-700">
               {currentVersion.content.learningObjectives.map((o, i) => (
-                <li key={i}>{o}</li>
+                <li key={i}>
+                  <RichContent content={o} className="inline-block" />
+                </li>
               ))}
             </ul>
           </div>
@@ -273,7 +275,9 @@ export function StudyGuideSection({ topicId }: { topicId: number }) {
                           <p className="mb-1 text-[11px] font-bold text-amber-700">Common Mistakes</p>
                           <ul className="list-disc space-y-0.5 pl-4 text-xs">
                             {concept.commonMisconceptions.map((m, mi) => (
-                              <li key={mi}>{m}</li>
+                              <li key={mi}>
+                                <RichContent content={m} className="inline-block" />
+                              </li>
                             ))}
                           </ul>
                         </div>
@@ -292,7 +296,9 @@ export function StudyGuideSection({ topicId }: { topicId: number }) {
                 {currentVersion.content.vocabulary.map((v, i) => (
                   <div key={i} className="rounded-lg border border-slate-200 bg-white p-2.5 text-xs">
                     <span className="font-bold text-slate-800">{v.term}</span>
-                    <p className="text-slate-600">{v.definition}</p>
+                    <div className="mt-0.5 text-slate-600">
+                      <RichContent content={v.definition} />
+                    </div>
                   </div>
                 ))}
               </div>
@@ -305,8 +311,15 @@ export function StudyGuideSection({ topicId }: { topicId: number }) {
               <div className="space-y-2">
                 {[...(currentVersion.content.practiceQuestions ?? []), ...(currentVersion.content.reviewQuestions ?? [])].map((q, i) => (
                   <details key={i} className="rounded-lg border border-slate-200 bg-white p-2.5 text-xs">
-                    <summary className="cursor-pointer font-semibold text-slate-800">{q.question}</summary>
-                    <p className="mt-1.5 text-slate-600">{q.answer}</p>
+                    <summary className="cursor-pointer font-semibold text-slate-800">
+                      <div className="inline-block align-middle">
+                        <RichContent content={q.question} />
+                      </div>
+                    </summary>
+                    <div className="mt-1.5 border-t border-slate-100 pt-1.5 text-slate-600">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 mb-0.5">Solution</p>
+                      <RichContent content={q.answer} />
+                    </div>
                   </details>
                 ))}
               </div>

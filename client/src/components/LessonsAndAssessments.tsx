@@ -13,9 +13,11 @@ import {
   Check,
   Archive,
   Layers,
+  Printer,
 } from 'lucide-react';
 import { api, apiErrorBody } from '../lib/api';
 import { RichContent } from './RichContent';
+import { WorksheetModal } from './WorksheetModal';
 
 interface LessonSection {
   id: number;
@@ -56,13 +58,18 @@ const STATUS_LABEL: Record<string, string> = { draft: 'Draft', approved: 'Approv
 export function LessonsAndAssessmentsSection({ topicId, childId }: { topicId: number; childId: number }) {
   const [expandAllLessons, setExpandAllLessons] = useState(false);
   const [expandAllQuizzes, setExpandAllQuizzes] = useState(false);
+  const [worksheetTarget, setWorksheetTarget] = useState<{ lessonId?: number; lessonTitle?: string } | null>(null);
+  const [showTopicWorksheet, setShowTopicWorksheet] = useState(false);
 
   return (
     <div className="space-y-6 pt-1">
       <LessonsSubsection
         topicId={topicId}
+        childId={childId}
         allExpanded={expandAllLessons}
         onToggleExpandAll={() => setExpandAllLessons(!expandAllLessons)}
+        onOpenWorksheet={(lessonId, lessonTitle) => setWorksheetTarget({ lessonId, lessonTitle })}
+        onOpenTopicWorksheet={() => setShowTopicWorksheet(true)}
       />
       <AssessmentsSubsection
         topicId={topicId}
@@ -70,6 +77,21 @@ export function LessonsAndAssessmentsSection({ topicId, childId }: { topicId: nu
         allExpanded={expandAllQuizzes}
         onToggleExpandAll={() => setExpandAllQuizzes(!expandAllQuizzes)}
       />
+
+      {/* Worksheet Generator Modal */}
+      {(showTopicWorksheet || worksheetTarget !== null) && (
+        <WorksheetModal
+          isOpen={true}
+          onClose={() => {
+            setShowTopicWorksheet(false);
+            setWorksheetTarget(null);
+          }}
+          topicId={topicId}
+          lessonId={worksheetTarget?.lessonId}
+          childId={childId}
+          defaultTitle={worksheetTarget?.lessonTitle}
+        />
+      )}
     </div>
   );
 }
@@ -78,10 +100,15 @@ function LessonsSubsection({
   topicId,
   allExpanded,
   onToggleExpandAll,
+  onOpenWorksheet,
+  onOpenTopicWorksheet,
 }: {
   topicId: number;
+  childId: number;
   allExpanded: boolean;
   onToggleExpandAll: () => void;
+  onOpenWorksheet: (lessonId: number, lessonTitle: string) => void;
+  onOpenTopicWorksheet: () => void;
 }) {
   const queryClient = useQueryClient();
   const [prompt, setPrompt] = useState('');
@@ -149,7 +176,7 @@ function LessonsSubsection({
             <Layers className="h-4 w-4" />
           </div>
           <div>
-            <h3 className="font-bold text-sm text-slate-800">Interactive Lessons</h3>
+            <h3 className="font-bold text-sm text-slate-800">Interactive Lessons &amp; Worksheets</h3>
             <p className="text-[11px] text-slate-400">
               {lessons.length} structured {lessons.length === 1 ? 'lesson' : 'lessons'} available
             </p>
@@ -157,6 +184,16 @@ function LessonsSubsection({
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Printable Worksheet Quick Trigger */}
+          <button
+            onClick={onOpenTopicWorksheet}
+            className="flex items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50/80 px-3 py-1.5 text-xs font-bold text-purple-700 hover:bg-purple-100 hover:border-purple-300 transition-all shadow-soft-xs"
+            title="Generate printable practice worksheet with LaTeX math preservation"
+          >
+            <Printer className="h-3.5 w-3.5" />
+            <span>Practice Worksheet</span>
+          </button>
+
           {lessons.length > 0 && (
             <button
               onClick={onToggleExpandAll}
@@ -225,15 +262,24 @@ function LessonsSubsection({
         <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center">
           <p className="text-xs font-semibold text-slate-600">No lessons generated yet</p>
           <p className="text-[11px] text-slate-400 mt-0.5 mb-3">
-            Generate an interactive lesson with reading passages, questions, and progressive hints.
+            Generate an interactive lesson with reading passages, questions, and progressive hints, or create a printable practice worksheet.
           </p>
-          <button
-            onClick={() => setGenerating(true)}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-purple-600 px-3 py-1.5 text-xs font-bold text-white shadow-soft-xs hover:bg-purple-700"
-          >
-            <Sparkles className="h-3.5 w-3.5" />
-            <span>Generate First Lesson</span>
-          </button>
+          <div className="flex items-center justify-center gap-2">
+            <button
+              onClick={() => setGenerating(true)}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-purple-600 px-3 py-1.5 text-xs font-bold text-white shadow-soft-xs hover:bg-purple-700"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              <span>Generate First Lesson</span>
+            </button>
+            <button
+              onClick={onOpenTopicWorksheet}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-purple-300 bg-white px-3 py-1.5 text-xs font-bold text-purple-700 shadow-soft-xs hover:bg-purple-50"
+            >
+              <Printer className="h-3.5 w-3.5" />
+              <span>Printable Worksheet</span>
+            </button>
+          </div>
         </div>
       )}
 
@@ -280,6 +326,16 @@ function LessonsSubsection({
                 </button>
 
                 <div className="flex items-center gap-1.5 ml-2">
+                  {/* Lesson Printable Worksheet Trigger */}
+                  <button
+                    onClick={() => onOpenWorksheet(lesson.id, lesson.title)}
+                    className="flex items-center gap-1 rounded-lg border border-purple-200 bg-purple-50/60 px-2.5 py-1 text-xs font-bold text-purple-700 hover:bg-purple-100 transition-colors"
+                    title="Generate printable worksheet for this lesson"
+                  >
+                    <Printer className="h-3 w-3" />
+                    <span>Worksheet</span>
+                  </button>
+
                   <button
                     onClick={() => toggleLesson(lesson.id)}
                     className="rounded-lg p-1.5 text-xs font-semibold text-purple-600 hover:bg-purple-50"
@@ -330,8 +386,8 @@ function LessonsSubsection({
                                   key={cIdx}
                                   className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700"
                                 >
-                                  <span className="h-2 w-2 rounded-full bg-purple-400" />
-                                  <span>{c}</span>
+                                  <span className="h-2 w-2 rounded-full bg-purple-400 shrink-0" />
+                                  <RichContent content={String(c)} className="inline-block" />
                                 </div>
                               ))}
                             </div>
@@ -344,6 +400,14 @@ function LessonsSubsection({
                   {/* Actions Bar */}
                   <div className="flex items-center justify-between border-t border-slate-100 pt-3">
                     <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => onOpenWorksheet(lesson.id, lesson.title)}
+                        className="flex items-center gap-1 rounded-xl border border-purple-200 bg-purple-50 px-3 py-1.5 text-xs font-bold text-purple-700 hover:bg-purple-100"
+                      >
+                        <Printer className="h-3 w-3" />
+                        <span>Print Practice Worksheet</span>
+                      </button>
+
                       {lesson.status !== 'approved' && (
                         <button
                           onClick={() => setStatus.mutate({ lessonId: lesson.id, status: 'approved' })}
@@ -375,6 +439,7 @@ function LessonsSubsection({
     </div>
   );
 }
+
 
 function AssessmentsSubsection({
   topicId,
@@ -627,7 +692,7 @@ function AssessmentsSubsection({
                                 key={cIdx}
                                 className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-slate-600"
                               >
-                                {choice}
+                                <RichContent content={choice} className="inline-block" />
                               </div>
                             ))}
                           </div>
@@ -763,7 +828,9 @@ function QuizAttempt({
                       onChange={() => setResponses((prev) => ({ ...prev, [q.id]: choice }))}
                       className="text-purple-600 focus:ring-purple-500"
                     />
-                    <span>{choice}</span>
+                    <div className="flex-1">
+                      <RichContent content={choice} className="inline-block" />
+                    </div>
                   </label>
                 ))}
               </div>
