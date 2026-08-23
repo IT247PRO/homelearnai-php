@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AppLayout } from '../components/AppLayout';
+import { ChildNavHeader } from '../components/ChildNavHeader';
 import { TimeBlockForm, BLANK_TIME_BLOCK, WEEKDAY_NAMES, type TimeBlockFormState } from '../components/TimeBlockForm';
 import { useAuth } from '../hooks/useAuth';
 import { api } from '../lib/api';
+
 
 interface TimeBlockItem {
   id: number;
@@ -153,9 +155,10 @@ export default function CalendarPage() {
 
   return (
     <AppLayout>
-      <h1 className="mb-4 text-2xl font-semibold text-slate-900">Calendar</h1>
+      <ChildNavHeader childId={childId} activeTab="calendar" />
 
-      <div className="mb-4 overflow-x-auto rounded border border-slate-200 bg-white">
+      <div className="mb-6 overflow-x-auto rounded-2xl border border-slate-100 bg-white p-4 shadow-soft-xl">
+
         <div className="grid min-w-[900px] grid-cols-[3rem_repeat(7,1fr)]">
           <div className="border-b border-r border-slate-100" />
           {dayOrder.map((day) => (

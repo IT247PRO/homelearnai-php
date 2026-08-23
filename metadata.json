@@ -1,0 +1,8 @@
+{
+  "name": "HomeLearnAI",
+  "description": "AI-powered personalized homeschool curriculum and learning companion platform with interactive lesson player, spaced repetition, mastery tracking, and kids mode.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

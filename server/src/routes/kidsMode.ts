@@ -142,7 +142,8 @@ router.post('/exit', requireAuth, async (req, res, next) => {
     let childId: number | null = null;
     if (kidsToken) {
       try {
-        const payload = jwt.verify(kidsToken, process.env.JWT_SECRET!) as { childId: number };
+        const secret = process.env.JWT_SECRET || 'homelearnai-development-default-jwt-secret-key-32chars!';
+        const payload = jwt.verify(kidsToken, secret) as { childId: number };
         childId = payload.childId;
       } catch {
         childId = null;

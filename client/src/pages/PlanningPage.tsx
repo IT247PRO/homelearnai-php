@@ -3,7 +3,9 @@ import { useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DndContext, DragOverlay, useDraggable, useDroppable, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core';
 import { AppLayout } from '../components/AppLayout';
+import { ChildNavHeader } from '../components/ChildNavHeader';
 import { api } from '../lib/api';
+
 
 interface SessionItem {
   id: number;
@@ -130,7 +132,7 @@ export default function PlanningPage() {
 
   return (
     <AppLayout>
-      <h1 className="mb-4 text-2xl font-semibold text-slate-900">Planning Board</h1>
+      <ChildNavHeader childId={childId} activeTab="planning" />
 
       {capacityQuery.data && <CapacityMeter days={capacityQuery.data} />}
       {qualityQuery.data && <QualityAnalysisPanel analysis={qualityQuery.data} />}
@@ -167,18 +169,20 @@ export default function PlanningPage() {
 function CapacityMeter({ days }: { days: DayCapacity[] }) {
   const statusColor: Record<string, string> = { green: 'bg-emerald-500', yellow: 'bg-amber-500', red: 'bg-red-500' };
   return (
-    <section className="mb-4 rounded border border-slate-200 bg-white p-4">
-      <h2 className="mb-3 text-sm font-semibold text-slate-700">Weekly capacity</h2>
+    <section className="mb-6 rounded-2xl border border-slate-100 bg-white p-5 shadow-soft-xl">
+      <h2 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-400">Weekly Capacity & Utilization</h2>
       <div className="grid grid-cols-7 gap-2">
         {days.map((d) => (
-          <div key={d.day} className="text-center text-xs">
-            <div className="mb-1 font-medium text-slate-700">{DAY_NAMES[d.day]}</div>
-            <div className="h-3 overflow-hidden rounded-full bg-slate-200">
+          <div key={d.day} className="rounded-xl bg-slate-50/70 p-2 text-center text-xs">
+            <div className="mb-1 font-bold text-slate-700">{DAY_NAMES[d.day]}</div>
+            <div className="h-2.5 overflow-hidden rounded-full bg-slate-200">
               {d.availableMinutes > 0 && (
                 <div className={`h-full ${statusColor[d.status]}`} style={{ width: `${Math.min(100, d.utilizationPercent)}%` }} />
               )}
             </div>
-            <div className="mt-1 text-slate-500">{d.availableMinutes > 0 ? `${d.scheduledMinutes}/${d.availableMinutes}m` : 'no blocks'}</div>
+            <div className="mt-1 text-[10px] text-slate-500 font-medium">
+              {d.availableMinutes > 0 ? `${d.scheduledMinutes}/${d.availableMinutes}m` : 'No blocks'}
+            </div>
           </div>
         ))}
       </div>
@@ -189,11 +193,11 @@ function CapacityMeter({ days }: { days: DayCapacity[] }) {
 function QualityAnalysisPanel({ analysis }: { analysis: QualityAnalysis }) {
   if (analysis.recommendations.length === 0) return null;
   return (
-    <section className="mb-4 rounded border border-amber-200 bg-amber-50 p-4">
-      <h2 className="mb-2 text-sm font-semibold text-amber-800">
-        Schedule quality — {analysis.daysExceedingAgeLimit} day(s) over the {analysis.maxDailyMinutes}min/day guideline for this age group
+    <section className="mb-6 rounded-2xl border border-amber-200/80 bg-amber-50/80 p-5 shadow-soft-sm">
+      <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-amber-900">
+        Schedule Quality Analysis — {analysis.daysExceedingAgeLimit} day(s) over the {analysis.maxDailyMinutes}m/day guideline
       </h2>
-      <ul className="list-inside list-disc space-y-1 text-sm text-amber-800">
+      <ul className="list-inside list-disc space-y-1 text-xs text-amber-800">
         {analysis.recommendations.map((r) => (
           <li key={r}>{r}</li>
         ))}
@@ -201,6 +205,7 @@ function QualityAnalysisPanel({ analysis }: { analysis: QualityAnalysis }) {
     </section>
   );
 }
+
 
 function StatusColumn({
   status,

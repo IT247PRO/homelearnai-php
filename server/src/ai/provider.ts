@@ -2,6 +2,7 @@ import type { z } from 'zod';
 import { OllamaProvider } from './providers/ollama.js';
 import { OpenAiProvider } from './providers/openai.js';
 import { AnthropicProvider } from './providers/anthropic.js';
+import { GeminiProvider } from './providers/gemini.js';
 
 export class AiNotConfiguredError extends Error {
   constructor() {
@@ -60,9 +61,12 @@ let cachedProvider: AiProvider | undefined;
  */
 export function getAiProvider(): AiProvider {
   if (!cachedProvider) {
-    const configured = process.env.AI_PROVIDER;
+    const configured = process.env.AI_PROVIDER || (process.env.GEMINI_API_KEY ? 'gemini' : undefined);
     try {
       switch (configured) {
+        case 'gemini':
+          cachedProvider = new GeminiProvider();
+          break;
         case 'ollama':
           cachedProvider = new OllamaProvider();
           break;

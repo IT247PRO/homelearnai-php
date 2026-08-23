@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AppLayout } from '../components/AppLayout';
+import { ChildNavHeader } from '../components/ChildNavHeader';
 import { OcclusionEditor, type OcclusionBox } from '../components/OcclusionEditor';
 import { RichContent } from '../components/RichContent';
 import { LessonsAndAssessmentsSection } from '../components/LessonsAndAssessments';
@@ -9,7 +10,8 @@ import { MasterySection } from '../components/MasterySection';
 import { LearningProfileSection } from '../components/LearningProfileSection';
 import { InsightsSection } from '../components/InsightsSection';
 import { TutorChat } from '../components/TutorChat';
-import { api, apiErrorBody } from '../lib/api';
+import { api } from '../lib/api';
+
 
 interface Subject {
   id: number;
@@ -40,87 +42,25 @@ interface Flashcard {
 
 export default function ChildPage() {
   const { childId } = useParams<{ childId: string }>();
+  const id = Number(childId);
 
   return (
     <AppLayout>
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-slate-900">Curriculum</h1>
-        <div className="flex flex-wrap gap-3 text-sm">
-          <Link to={`/children/${childId}/planning`} className="rounded bg-slate-700 px-3 py-2 text-white hover:bg-slate-800">
-            Planning board
-          </Link>
-          <Link to={`/children/${childId}/review`} className="rounded bg-emerald-600 px-3 py-2 text-white hover:bg-emerald-700">
-            Review flashcards
-          </Link>
-          <Link to={`/children/${childId}/ai`} className="rounded bg-purple-600 px-3 py-2 text-white hover:bg-purple-700">
-            AI curriculum generator
-          </Link>
-          <Link to={`/curricula/new?childId=${childId}`} className="rounded bg-purple-100 px-3 py-2 text-purple-800 hover:bg-purple-200">
-            Import curriculum
-          </Link>
-          <EnterKidsModeButton childId={Number(childId)} />
-        </div>
+      <ChildNavHeader childId={id} activeTab="curriculum" />
+      <div className="space-y-6">
+        <SubjectsSection childId={id} />
+        <LearningProfileSection childId={id} />
+        <MasterySection childId={id} />
+        <InsightsSection childId={id} />
+        <SessionsSection childId={id} />
+        <ScheduleSection childId={id} />
+        <CatchUpSection childId={id} />
+        <ReviewSlotsSection childId={id} />
       </div>
-      <SubjectsSection childId={Number(childId)} />
-      <LearningProfileSection childId={Number(childId)} />
-      <MasterySection childId={Number(childId)} />
-      <InsightsSection childId={Number(childId)} />
-      <SessionsSection childId={Number(childId)} />
-      <ScheduleSection childId={Number(childId)} />
-      <CatchUpSection childId={Number(childId)} />
-      <ReviewSlotsSection childId={Number(childId)} />
     </AppLayout>
   );
 }
 
-function EnterKidsModeButton({ childId }: { childId: number }) {
-  const navigate = useNavigate();
-  const [open, setOpen] = useState(false);
-  const [pin, setPin] = useState('');
-  const [error, setError] = useState<string | null>(null);
-
-  const enterMutation = useMutation({
-    mutationFn: async () => {
-      await api.post(`/kids-mode/${childId}/enter`, { pin });
-    },
-    onSuccess: () => navigate('/kids'),
-    onError: (err) => setError(apiErrorBody(err)?.error ?? 'Could not enter Kids Mode'),
-  });
-
-  if (!open) {
-    return (
-      <button onClick={() => setOpen(true)} className="rounded bg-amber-500 px-3 py-2 text-white hover:bg-amber-600">
-        Enter Kids Mode
-      </button>
-    );
-  }
-
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        enterMutation.mutate();
-      }}
-      className="flex items-center gap-2"
-    >
-      <input
-        type="password"
-        inputMode="numeric"
-        placeholder="PIN"
-        aria-label="Kids Mode PIN"
-        required
-        value={pin}
-        onChange={(e) => setPin(e.target.value)}
-        className="w-20 rounded border border-slate-300 px-2 py-2"
-        autoFocus
-      />
-      <button type="submit" className="rounded bg-amber-500 px-3 py-2 text-white hover:bg-amber-600">
-        Go
-      </button>
-      {error && <span className="text-xs text-red-600">{error}</span>}
-    </form>
-  );
-}
 
 interface TimeBlockItem {
   id: number;

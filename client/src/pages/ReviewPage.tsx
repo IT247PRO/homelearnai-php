@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AppLayout } from '../components/AppLayout';
+import { ChildNavHeader } from '../components/ChildNavHeader';
 import { FlashcardReviewCard, type ReviewFlashcard, type ReviewResult } from '../components/FlashcardReviewCard';
+import { Flame, Award, Sparkles } from 'lucide-react';
 import { api } from '../lib/api';
 
 interface QueuedReview {
@@ -19,6 +21,7 @@ interface GamificationState {
 
 export default function ReviewPage() {
   const { childId } = useParams<{ childId: string }>();
+  const id = Number(childId);
   const queryClient = useQueryClient();
   const [banner, setBanner] = useState<string | null>(null);
 
@@ -53,24 +56,42 @@ export default function ReviewPage() {
 
   return (
     <AppLayout>
-      <h1 className="mb-4 text-2xl font-semibold text-slate-900">Flashcard Review</h1>
+      <ChildNavHeader childId={id} activeTab="review" />
 
       {gamificationQuery.data && (
-        <div className="mb-4 flex gap-4 rounded border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600">
-          <span>🔥 {gamificationQuery.data.currentStreakDays} day streak</span>
-          <span>⭐ {gamificationQuery.data.totalPoints} points</span>
-          <span className="text-slate-400">Best streak: {gamificationQuery.data.longestStreakDays} days</span>
+        <div className="mb-6 flex flex-wrap items-center gap-4 rounded-2xl border border-slate-100 bg-white p-4 shadow-soft-xl">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-orange-100 text-orange-600">
+              <Flame className="h-4 w-4" />
+            </div>
+            <span className="text-xs font-bold text-slate-800">{gamificationQuery.data.currentStreakDays} Day Streak</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-purple-100 text-purple-600">
+              <Award className="h-4 w-4" />
+            </div>
+            <span className="text-xs font-bold text-slate-800">{gamificationQuery.data.totalPoints} Total Points</span>
+          </div>
+          <span className="text-xs text-slate-400">
+            Personal Best: {gamificationQuery.data.longestStreakDays} days
+          </span>
         </div>
       )}
 
-      {banner && <p className="mb-4 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">{banner}</p>}
+      {banner && <p className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-medium text-amber-800">{banner}</p>}
 
-      {queueQuery.isLoading && <p className="text-slate-500">Loading…</p>}
+      {queueQuery.isLoading && <p className="text-xs text-slate-400">Loading flashcards…</p>}
 
       {!queueQuery.isLoading && !current && (
-        <p className="rounded border border-slate-200 bg-white p-6 text-center text-slate-500">
-          Nothing due for review right now — check back later.
-        </p>
+        <div className="rounded-2xl border border-slate-100 bg-white p-8 text-center shadow-soft-xl">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-600">
+            <Sparkles className="h-6 w-6" />
+          </div>
+          <h3 className="text-sm font-bold text-slate-800">All caught up!</h3>
+          <p className="mt-1 text-xs text-slate-500">
+            No flashcards due for spaced repetition right now. Check back during scheduled review slots.
+          </p>
+        </div>
       )}
 
       {current?.flashcard && (
@@ -85,3 +106,4 @@ export default function ReviewPage() {
     </AppLayout>
   );
 }
+

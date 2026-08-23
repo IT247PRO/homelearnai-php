@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Lock, ShieldCheck, KeyRound, AlertTriangle, Check } from 'lucide-react';
 import { AppLayout } from '../components/AppLayout';
 import { api, apiErrorBody } from '../lib/api';
 
@@ -43,55 +44,123 @@ export default function KidsModeSettingsPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['kids-mode-settings'] }),
   });
 
+  const hasPin = settingsQuery.data?.hasPinSetup;
+
   return (
     <AppLayout>
-      <h1 className="mb-4 text-2xl font-semibold text-slate-900">Kids Mode Settings</h1>
-
-      <div className="mb-6 rounded border border-slate-200 bg-white p-4">
-        <p className="text-sm text-slate-600">
-          Status:{' '}
-          <span className="font-medium">
-            {settingsQuery.data?.hasPinSetup ? 'PIN configured' : 'No PIN set up yet'}
-          </span>
-          {settingsQuery.data?.isLocked && <span className="ml-2 text-red-600">Locked due to failed attempts</span>}
+      <div className="mb-6">
+        <h1 className="text-xl font-bold text-slate-800">Kids Mode & Parental Lock</h1>
+        <p className="text-xs text-slate-400">
+          Configure security PIN protection to prevent children from exiting Kids Mode into the parent portal
         </p>
       </div>
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          setSuccess(false);
-          setPinMutation.mutate();
-        }}
-        className="mb-4 space-y-3 rounded border border-slate-200 bg-white p-4"
-      >
-        <label className="block text-sm font-medium text-slate-700">
-          {settingsQuery.data?.hasPinSetup ? 'Change PIN (4-6 digits)' : 'Set up a PIN (4-6 digits)'}
-        </label>
-        <input
-          type="password"
-          inputMode="numeric"
-          pattern="\d{4,6}"
-          required
-          value={pin}
-          onChange={(e) => setPin(e.target.value)}
-          className="w-32 rounded border border-slate-300 px-3 py-2"
-        />
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        {success && <p className="text-sm text-emerald-600">PIN saved.</p>}
-        <button type="submit" className="rounded bg-brand-600 px-4 py-2 text-white hover:bg-brand-700">
-          Save PIN
-        </button>
-      </form>
+      <div className="max-w-2xl space-y-6">
+        {/* Status Card */}
+        <div className="flex items-center justify-between rounded-2xl border border-slate-100 bg-white p-5 shadow-soft-xl">
+          <div className="flex items-center gap-3.5">
+            <div
+              className={`flex h-11 w-11 items-center justify-center rounded-xl text-white shadow-soft-sm ${
+                hasPin
+                  ? 'bg-gradient-to-tl from-emerald-600 to-teal-400'
+                  : 'bg-gradient-to-tl from-amber-500 to-orange-400'
+              }`}
+            >
+              {hasPin ? <ShieldCheck className="h-6 w-6" /> : <Lock className="h-6 w-6" />}
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-800">
+                {hasPin ? 'Parental Lock Protected' : 'No PIN Configured'}
+              </h3>
+              <p className="text-xs text-slate-400">
+                {hasPin
+                  ? 'PIN is active. Required to exit Kids Mode.'
+                  : 'Set a 4-6 digit numerical PIN below to secure parent settings.'}
+              </p>
+            </div>
+          </div>
 
-      {settingsQuery.data?.hasPinSetup && (
-        <button
-          onClick={() => resetPinMutation.mutate()}
-          className="text-sm text-red-600 hover:underline"
-        >
-          Remove PIN (disables Kids Mode entry until a new PIN is set)
-        </button>
-      )}
+          <span
+            className={`rounded-xl px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${
+              hasPin ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+            }`}
+          >
+            {hasPin ? 'Protected' : 'Unprotected'}
+          </span>
+        </div>
+
+        {/* PIN Configuration Card */}
+        <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-soft-xl">
+          <div className="flex items-center gap-2 mb-4">
+            <KeyRound className="h-4 w-4 text-purple-600" />
+            <h2 className="text-sm font-bold text-slate-800">
+              {hasPin ? 'Update Parental PIN' : 'Set Up Parental PIN'}
+            </h2>
+          </div>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              setSuccess(false);
+              setPinMutation.mutate();
+            }}
+            className="space-y-4"
+          >
+            <div>
+              <label className="block text-xs font-bold text-slate-700">
+                PIN Code (4-6 digits)
+              </label>
+              <input
+                type="password"
+                inputMode="numeric"
+                pattern="\d{4,6}"
+                required
+                value={pin}
+                onChange={(e) => setPin(e.target.value)}
+                placeholder="••••"
+                className="mt-1 w-48 rounded-xl border border-slate-200 p-2.5 text-center font-mono text-base tracking-widest text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+              />
+            </div>
+
+            {error && (
+              <div className="flex items-center gap-2 rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-700">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            {success && (
+              <div className="flex items-center gap-2 rounded-xl bg-emerald-50 p-3 text-xs font-semibold text-emerald-700">
+                <Check className="h-4 w-4 shrink-0" />
+                <span>Parental PIN successfully updated.</span>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={setPinMutation.isPending}
+              className="flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-tl from-purple-700 to-pink-500 px-5 py-2.5 text-xs font-bold text-white shadow-soft-md transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+            >
+              <span>{setPinMutation.isPending ? 'Saving PIN…' : 'Save Parental PIN'}</span>
+            </button>
+          </form>
+
+          {hasPin && (
+            <div className="mt-6 pt-4 border-t border-slate-100">
+              <button
+                onClick={() => {
+                  if (confirm('Remove Parental PIN? Anyone in Kids Mode will be able to exit freely.')) {
+                    resetPinMutation.mutate();
+                  }
+                }}
+                className="text-xs font-semibold text-red-600 hover:text-red-700 hover:underline"
+              >
+                Remove PIN Protection
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
     </AppLayout>
   );
 }

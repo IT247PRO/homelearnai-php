@@ -12,7 +12,8 @@
     "dev": "concurrently -n server,client -c blue,green \"npm run dev --workspace=server\" \"npm run dev --workspace=client\"",
     "dev:server": "npm run dev --workspace=server",
     "dev:client": "npm run dev --workspace=client",
-    "build": "npm run build --workspace=server && npm run build --workspace=client",
+    "build": "npm run build --workspace=client && cp -r client/dist dist",
+    "lint": "npm run lint --workspace=client",
     "db:generate": "npm run generate --workspace=database",
     "db:migrate": "npm run migrate --workspace=database",
     "db:migrate:deploy": "npm run migrate:deploy --workspace=database",
@@ -21,6 +22,13 @@
     "db:reset": "npm run reset --workspace=database"
   },
   "devDependencies": {
-    "concurrently": "^9.1.0"
+    "@prisma/client": "^6.1.0",
+    "concurrently": "^9.1.0",
+    "esbuild": "^0.28.2",
+    "prisma": "^6.1.0",
+    "tsx": "^4.23.12"
+  },
+  "dependencies": {
+    "@google/genai": "^2.18.0"
   }
 }
