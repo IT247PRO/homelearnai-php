@@ -1,0 +1,1119 @@
+// HomeLearnAI v2 — Prisma schema (SQLite)
+// Ported from the Laravel/PostgreSQL schema at the repository root, plus new
+// AI/adaptive-learning tables added per plan.md. Laravel "enum" columns were actually
+// varchar + CHECK constraints, not native enums — the string fields below are validated
+// at the API layer (zod), matching that reality rather than relying on DB-level enums.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Core ported domain
+// ---------------------------------------------------------------------------
+
+model User {
+  id                      Int       @id @default(autoincrement())
+  name                    String
+  email                   String    @unique
+  passwordHash            String
+  emailVerifiedAt         DateTime?
+  locale                  String    @default("en")
+  timezone                String    @default("UTC")
+  dateFormat              String    @default("Y-m-d")
+  regionFormat            String    @default("us")
+  timeFormat              String    @default("12h")
+  weekStart               String    @default("sunday")
+  dateFormatType          String    @default("us")
+  onboardingCompleted     Boolean   @default(false)
+  onboardingSkipped       Boolean   @default(false)
+  notificationPreferences Json?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  children           Child[]
+  subjects           Subject[]
+  tasks              Task[]
+  flashcardImports   FlashcardImport[]
+  kidsModeAuditLogs  KidsModeAuditLog[]
+  kidsModeSettings   KidsModeSettings?
+  familyAiSettings   FamilyAiSettings?
+  aiConversations    AiConversation[]
+  aiGenerations      AiGeneration[]
+  aiUsage            AiUsage[]
+  approvedStudyPlans StudyPlan[]        @relation("StudyPlanApprovedBy")
+  authTokens         AuthToken[]
+  fileAssets         FileAsset[]
+  curricula          Curriculum[]
+}
+
+model AuthToken {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  purpose   String // 'password_reset' | 'email_verification'
+  tokenHash String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+  @@index([tokenHash])
+}
+
+model KidsModeSettings {
+  id             Int       @id @default(autoincrement())
+  userId         Int       @unique
+  pinHash        String?
+  pinSalt        String?
+  failedAttempts Int       @default(0)
+  lockedUntil    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model FamilyAiSettings {
+  id                       Int      @id @default(autoincrement())
+  userId                   Int      @unique
+  aiEnabled                Boolean  @default(false)
+  tutorEnabled             Boolean  @default(false)
+  contentGenerationEnabled Boolean  @default(false)
+  defaultModel             String?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Child {
+  id                Int       @id @default(autoincrement())
+  userId            Int
+  name              String
+  grade             String?
+  independenceLevel Int       @default(1)
+  dateOfBirth       DateTime?
+  avatarUrl         String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  user                   User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjects               Subject[]
+  learningSessions       LearningSession[]
+  reviews                Review[]
+  reviewSlots            ReviewSlot[]
+  catchUpSessions        CatchUpSession[]
+  timeBlocks             TimeBlock[]
+  kidsModeAuditLogs      KidsModeAuditLog[]
+  learningProfile        LearningProfile?
+  masteries              Mastery[]
+  masteryEvents          MasteryEvent[]
+  aiConversations        AiConversation[]
+  aiGenerations          AiGeneration[]
+  aiRecommendations      AiRecommendation[]
+  aiInsights             AiInsight[]
+  studyPlans             StudyPlan[]
+  assessmentAttempts     AssessmentAttempt[]
+  achievements           ChildAchievement[]
+  gamificationState      ChildGamificationState?
+  activityEvents         KidsActivityEvent[]
+  childCurricula         ChildCurriculum[]
+  lessonSectionResponses LessonSectionResponse[]
+  lessonProgress         LessonProgress[]
+
+  @@index([userId])
+}
+
+model Subject {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  childId   Int?
+  name      String
+  color     String   @default("#3b82f6")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  child          Child?            @relation(fields: [childId], references: [id], onDelete: Cascade)
+  units          Unit[]
+  childCurricula ChildCurriculum[]
+
+  @@index([userId])
+  @@index([childId])
+}
+
+model Unit {
+  id                   Int       @id @default(autoincrement())
+  subjectId            Int
+  name                 String
+  description          String?
+  targetCompletionDate DateTime?
+  sortOrder            Int       @default(0)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  subject          Subject           @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  topics           Topic[]
+  flashcardImports FlashcardImport[]
+  assessments      Assessment[]
+
+  @@index([subjectId])
+}
+
+model Topic {
+  id                Int      @id @default(autoincrement())
+  unitId            Int
+  title             String
+  description       String?
+  learningContent   String?
+  contentAssets     Json?
+  estimatedMinutes  Int      @default(30)
+  prerequisites     Json?
+  required          Boolean  @default(true)
+  sortOrder         Int      @default(0)
+  curriculumTopicId Int?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  unit             Unit                @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  curriculumTopic  CurriculumTopic?    @relation(fields: [curriculumTopicId], references: [id], onDelete: SetNull)
+  flashcards       Flashcard[]
+  learningSessions LearningSession[]
+  reviews          Review[]
+  catchUpSessions  CatchUpSession[]
+  masteries        Mastery[]
+  masteryEvents    MasteryEvent[]
+  aiInsights       AiInsight[]
+  lessons          Lesson[]
+  studyPlanItems   StudyPlanItem[]
+  assessments      Assessment[]
+  taggedQuestions  Question[]
+  activityEvents   KidsActivityEvent[]
+  fileAssets       FileAsset[]
+  aiConversations  AiConversation[]
+
+  @@index([unitId])
+  @@index([curriculumTopicId])
+}
+
+model Flashcard {
+  id               Int       @id @default(autoincrement())
+  topicId          Int
+  cardType         String    @default("basic")
+  difficultyLevel  String    @default("medium")
+  question         String
+  answer           String
+  hint             String?
+  choices          Json?
+  correctChoices   Json?
+  clozeText        String?
+  clozeAnswers     Json?
+  questionImageUrl String?
+  answerImageUrl   String?
+  occlusionData    Json?
+  tags             Json?
+  isActive         Boolean   @default(true)
+  importSource     String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  topic   Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  reviews Review[]
+
+  @@index([topicId])
+  @@index([isActive])
+}
+
+model FlashcardImport {
+  id             Int       @id @default(autoincrement())
+  unitId         Int
+  userId         Int
+  importType     String
+  filename       String
+  status         String    @default("pending")
+  totalCards     Int       @default(0)
+  importedCards  Int       @default(0)
+  failedCards    Int       @default(0)
+  duplicateCards Int       @default(0)
+  mediaFiles     Int       @default(0)
+  importOptions  Json?
+  importMetadata Json?
+  importResults  Json?
+  rollbackData   Json?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  unit Unit @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([unitId])
+}
+
+model LearningSession {
+  id                  Int       @id @default(autoincrement())
+  childId             Int
+  topicId             Int
+  lessonId            Int?
+  estimatedMinutes    Int
+  status              String    @default("backlog")
+  commitmentType      String    @default("preferred")
+  scheduledDayOfWeek  Int?
+  scheduledStartTime  String?
+  scheduledEndTime    String?
+  scheduledDate       DateTime?
+  skippedFromDate     DateTime?
+  notes               String?
+  evidenceNotes       String?
+  evidencePhotos      Json?
+  evidenceVoiceMemo   String?
+  evidenceAttachments Json?
+  completedAt         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  child                Child            @relation(fields: [childId], references: [id], onDelete: Cascade)
+  topic                Topic            @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  lesson               Lesson?          @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  reviews              Review[]
+  catchUpOrigins       CatchUpSession[] @relation("CatchUpOriginalSession")
+  catchUpReassignments CatchUpSession[] @relation("CatchUpReassignedSession")
+  studyPlanItems       StudyPlanItem[]
+
+  @@index([childId])
+  @@index([topicId])
+  @@index([status])
+}
+
+model Review {
+  id             Int       @id @default(autoincrement())
+  childId        Int
+  topicId        Int
+  sessionId      Int?
+  flashcardId    Int?
+  intervalDays   Int       @default(1)
+  easeFactor     Float     @default(2.5)
+  repetitions    Int       @default(0)
+  status         String    @default("new")
+  dueDate        DateTime?
+  lastReviewedAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  child         Child            @relation(fields: [childId], references: [id], onDelete: Cascade)
+  topic         Topic            @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  session       LearningSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  flashcard     Flashcard?       @relation(fields: [flashcardId], references: [id], onDelete: SetNull)
+  masteryEvents MasteryEvent[]
+
+  @@index([childId, dueDate])
+  @@index([childId, status])
+}
+
+model ReviewSlot {
+  id        Int      @id @default(autoincrement())
+  childId   Int
+  dayOfWeek Int
+  startTime String
+  endTime   String
+  slotType  String   @default("micro")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  child Child @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  @@index([childId, dayOfWeek])
+}
+
+model CatchUpSession {
+  id                    Int      @id @default(autoincrement())
+  originalSessionId     Int
+  childId               Int
+  topicId               Int
+  estimatedMinutes      Int
+  priority              Int      @default(3)
+  missedDate            DateTime
+  reason                String?
+  reassignedToSessionId Int?
+  status                String   @default("pending")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  originalSession     LearningSession  @relation("CatchUpOriginalSession", fields: [originalSessionId], references: [id], onDelete: Cascade)
+  reassignedToSession LearningSession? @relation("CatchUpReassignedSession", fields: [reassignedToSessionId], references: [id], onDelete: SetNull)
+  child               Child            @relation(fields: [childId], references: [id], onDelete: Cascade)
+  topic               Topic            @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@index([childId, status])
+}
+
+model TimeBlock {
+  id             Int      @id @default(autoincrement())
+  childId        Int
+  dayOfWeek      Int
+  startTime      String
+  endTime        String
+  label          String
+  isImported     Boolean  @default(false)
+  commitmentType String   @default("preferred")
+  sourceUid      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  child Child @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  @@index([childId])
+}
+
+model KidsModeAuditLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  childId   Int?
+  action    String
+  ipAddress String?
+  userAgent String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  child Child? @relation(fields: [childId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
+}
+
+model Task {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  title       String
+  description String?
+  priority    String    @default("medium")
+  status      String    @default("pending")
+  dueDate     DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+}
+
+// ---------------------------------------------------------------------------
+// AI / adaptive-learning domain (new — no Laravel equivalent)
+// ---------------------------------------------------------------------------
+
+model AiPromptTemplate {
+  id                 Int      @id @default(autoincrement())
+  key                String
+  version            String
+  systemPrompt       String
+  userPromptTemplate String
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  generations AiGeneration[]
+
+  @@unique([key, version])
+}
+
+model AiConversation {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  childId   Int?
+  topicId   Int?
+  lessonId  Int?
+  kind      String
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  child       Child?         @relation(fields: [childId], references: [id], onDelete: Cascade)
+  topic       Topic?         @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  lesson      Lesson?        @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  messages    AiMessage[]
+  generations AiGeneration[]
+
+  @@index([userId])
+  @@index([childId])
+  @@index([topicId])
+}
+
+model AiMessage {
+  id             Int      @id @default(autoincrement())
+  conversationId Int
+  role           String
+  content        String
+  tokenCount     Int?
+  createdAt      DateTime @default(now())
+
+  conversation AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+}
+
+model AiGeneration {
+  id                     Int      @id @default(autoincrement())
+  conversationId         Int?
+  userId                 Int
+  childId                Int?
+  curriculumId           Int?
+  kind                   String
+  promptTemplateId       Int?
+  promptTemplateVersion  String?
+  provider               String?
+  model                  String?
+  requestContextRedacted Json?
+  validationStatus       String   @default("pending")
+  validationErrors       Json?
+  resultRefTable         String?
+  resultRefId            Int?
+  status                 String   @default("queued")
+  correlationId          String?
+  requestId              String?
+  durationMs             Int?
+  promptTokens           Int?
+  completionTokens       Int?
+  costUsd                Float?
+  errorMessage           String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  conversation   AiConversation?   @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  child          Child?            @relation(fields: [childId], references: [id], onDelete: SetNull)
+  curriculum     Curriculum?       @relation(fields: [curriculumId], references: [id], onDelete: SetNull)
+  promptTemplate AiPromptTemplate? @relation(fields: [promptTemplateId], references: [id], onDelete: SetNull)
+
+  recommendations       AiRecommendation[]
+  insights              AiInsight[]
+  lessons               Lesson[]
+  studyPlans            StudyPlan[]
+  assessments           Assessment[]
+  curriculumLessons     CurriculumLesson[]
+  curriculumAssessments CurriculumAssessment[]
+
+  @@index([userId])
+  @@index([childId])
+  @@index([curriculumId])
+}
+
+model AiUsage {
+  id               Int      @id @default(autoincrement())
+  userId           Int
+  date             DateTime
+  provider         String
+  model            String
+  promptTokens     Int      @default(0)
+  completionTokens Int      @default(0)
+  costUsd          Float    @default(0)
+  requestCount     Int      @default(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date])
+}
+
+model AiRecommendation {
+  id           Int       @id @default(autoincrement())
+  childId      Int
+  kind         String
+  title        String
+  body         String?
+  payload      Json?
+  status       String    @default("pending")
+  generationId Int?
+  createdAt    DateTime  @default(now())
+  expiresAt    DateTime?
+
+  child      Child         @relation(fields: [childId], references: [id], onDelete: Cascade)
+  generation AiGeneration? @relation(fields: [generationId], references: [id], onDelete: SetNull)
+
+  @@index([childId])
+}
+
+model AiInsight {
+  id                     Int      @id @default(autoincrement())
+  childId                Int
+  kind                   String
+  topicId                Int?
+  summary                String
+  evidence               Json?
+  confidence             Float?
+  generationId           Int?
+  isAcknowledgedByParent Boolean  @default(false)
+  createdAt              DateTime @default(now())
+
+  child      Child         @relation(fields: [childId], references: [id], onDelete: Cascade)
+  topic      Topic?        @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  generation AiGeneration? @relation(fields: [generationId], references: [id], onDelete: SetNull)
+
+  @@index([childId])
+}
+
+model LearningProfile {
+  id                            Int      @id @default(autoincrement())
+  childId                       Int      @unique
+  learningGoals                 Json?
+  interests                     Json?
+  learningPaceLabel             String?
+  preferredSessionLengthMinutes Int?
+  updatedAt                     DateTime @updatedAt
+
+  child Child @relation(fields: [childId], references: [id], onDelete: Cascade)
+}
+
+model Mastery {
+  id                  Int       @id @default(autoincrement())
+  childId             Int
+  topicId             Int
+  state               String    @default("not_started")
+  accuracy            Float?
+  attemptsCount       Int       @default(0)
+  timeSpentMinutes    Int       @default(0)
+  confidenceScore     Float?
+  lastActivityAt      DateTime?
+  forgettingRiskScore Float?
+  updatedAt           DateTime  @updatedAt
+
+  child  Child          @relation(fields: [childId], references: [id], onDelete: Cascade)
+  topic  Topic          @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  events MasteryEvent[]
+
+  @@unique([childId, topicId])
+}
+
+model MasteryEvent {
+  id                 Int      @id @default(autoincrement())
+  masteryId          Int
+  childId            Int
+  topicId            Int
+  previousState      String
+  newState           String
+  trigger            String
+  sourceReviewId     Int?
+  sourceAssessmentId Int?
+  deltaAccuracy      Float?
+  createdAt          DateTime @default(now())
+
+  mastery          Mastery            @relation(fields: [masteryId], references: [id], onDelete: Cascade)
+  child            Child              @relation(fields: [childId], references: [id], onDelete: Cascade)
+  topic            Topic              @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  sourceReview     Review?            @relation(fields: [sourceReviewId], references: [id], onDelete: SetNull)
+  sourceAssessment AssessmentAttempt? @relation(fields: [sourceAssessmentId], references: [id], onDelete: SetNull)
+
+  @@index([masteryId])
+}
+
+model Lesson {
+  id                 Int      @id @default(autoincrement())
+  topicId            Int
+  title              String
+  estimatedMinutes   Int?
+  status             String   @default("draft")
+  source             String   @default("parent_authored")
+  generationId       Int?
+  version            Int      @default(1)
+  curriculumLessonId Int?
+  lessonType         String?
+  sequenceNumber     Int?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  topic            Topic             @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  generation       AiGeneration?     @relation(fields: [generationId], references: [id], onDelete: SetNull)
+  curriculumLesson CurriculumLesson? @relation(fields: [curriculumLessonId], references: [id], onDelete: SetNull)
+  sections         LessonSection[]
+  resources        LessonResource[]
+  learningSessions LearningSession[]
+  studyPlanItems   StudyPlanItem[]
+  progress         LessonProgress[]
+  aiConversations  AiConversation[]
+
+  @@index([topicId])
+  @@index([curriculumLessonId])
+}
+
+model LessonSection {
+  id              Int     @id @default(autoincrement())
+  lessonId        Int
+  kind            String
+  content         String
+  sortOrder       Int     @default(0)
+  metadata        Json?
+  interactionType String? // multiple_choice | true_false | short_answer | fill_blank — null for non-interactive kinds
+  choices         Json?
+  correctAnswer   Json? // never sent to a Kids Mode client before it's answered — see routes/kidsLessons.ts
+  hints           Json? // ordered array of up to 2 progressive hint strings
+
+  lesson    Lesson                  @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  responses LessonSectionResponse[]
+
+  @@index([lessonId])
+}
+
+// Evidence log for an interactive LessonSection — the mechanism behind "page viewed !=
+// lesson completed" (Plan3 §65): a child can't advance past a required interactive section
+// without a recorded response here, and attemptNumber drives the progressive hint tier.
+model LessonSectionResponse {
+  id              Int      @id @default(autoincrement())
+  lessonSectionId Int
+  childId         Int
+  response        Json
+  isCorrect       Boolean?
+  attemptNumber   Int      @default(1)
+  createdAt       DateTime @default(now())
+
+  section LessonSection @relation(fields: [lessonSectionId], references: [id], onDelete: Cascade)
+  child   Child         @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  @@index([lessonSectionId, childId])
+}
+
+// Per-child progress through one Lesson's ordered sections (Plan3 §27/§28's Lesson Player
+// state). completedAt is only set once every required section has real evidence attached.
+model LessonProgress {
+  id                  Int       @id @default(autoincrement())
+  lessonId            Int
+  childId             Int
+  currentSectionIndex Int       @default(0)
+  startedAt           DateTime  @default(now())
+  completedAt         DateTime?
+
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  child  Child  @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  @@unique([lessonId, childId])
+}
+
+model LessonResource {
+  id       Int     @id @default(autoincrement())
+  lessonId Int
+  type     String
+  url      String
+  title    String?
+  metadata Json?
+
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@index([lessonId])
+}
+
+model StudyPlan {
+  id               Int       @id @default(autoincrement())
+  childId          Int
+  name             String
+  source           String    @default("ai_generated")
+  status           String    @default("draft")
+  startDate        DateTime?
+  endDate          DateTime?
+  generationId     Int?
+  approvedAt       DateTime?
+  approvedByUserId Int?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  child      Child           @relation(fields: [childId], references: [id], onDelete: Cascade)
+  generation AiGeneration?   @relation(fields: [generationId], references: [id], onDelete: SetNull)
+  approvedBy User?           @relation("StudyPlanApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+  items      StudyPlanItem[]
+
+  @@index([childId])
+}
+
+model StudyPlanItem {
+  id                    Int       @id @default(autoincrement())
+  studyPlanId           Int
+  topicId               Int?
+  lessonId              Int?
+  scheduledDate         DateTime?
+  dayOfWeek             Int?
+  sortOrder             Int       @default(0)
+  status                String    @default("pending")
+  materializedSessionId Int?
+
+  studyPlan           StudyPlan        @relation(fields: [studyPlanId], references: [id], onDelete: Cascade)
+  topic               Topic?           @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  lesson              Lesson?          @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  materializedSession LearningSession? @relation(fields: [materializedSessionId], references: [id], onDelete: SetNull)
+
+  @@index([studyPlanId])
+}
+
+model Assessment {
+  id           Int      @id @default(autoincrement())
+  topicId      Int?
+  unitId       Int?
+  title        String
+  source       String   @default("ai_generated")
+  generationId Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  topic      Topic?              @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  unit       Unit?               @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  generation AiGeneration?       @relation(fields: [generationId], references: [id], onDelete: SetNull)
+  questions  Question[]
+  attempts   AssessmentAttempt[]
+
+  @@index([topicId])
+  @@index([unitId])
+}
+
+model Question {
+  id                      Int    @id @default(autoincrement())
+  assessmentId            Int
+  type                    String
+  prompt                  String
+  choices                 Json?
+  correctAnswer           Json?
+  difficultyLevel         String @default("medium")
+  skillTagTopicId         Int?
+  sourceCurriculumSkillId Int?
+  sortOrder               Int    @default(0)
+
+  assessment            Assessment       @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  skillTagTopic         Topic?           @relation(fields: [skillTagTopicId], references: [id], onDelete: SetNull)
+  sourceCurriculumSkill CurriculumSkill? @relation(fields: [sourceCurriculumSkillId], references: [id], onDelete: SetNull)
+  answers               Answer[]
+
+  @@index([assessmentId])
+}
+
+model AssessmentAttempt {
+  id           Int       @id @default(autoincrement())
+  assessmentId Int
+  childId      Int
+  startedAt    DateTime  @default(now())
+  completedAt  DateTime?
+  score        Float?
+  status       String    @default("in_progress")
+
+  assessment    Assessment     @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  child         Child          @relation(fields: [childId], references: [id], onDelete: Cascade)
+  answers       Answer[]
+  masteryEvents MasteryEvent[]
+
+  @@index([assessmentId])
+  @@index([childId])
+}
+
+model Answer {
+  id               Int      @id @default(autoincrement())
+  attemptId        Int
+  questionId       Int
+  response         Json?
+  isCorrect        Boolean?
+  misconceptionTag String?
+  createdAt        DateTime @default(now())
+
+  attempt  AssessmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question Question          @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([attemptId])
+  @@index([questionId])
+}
+
+// ---------------------------------------------------------------------------
+// Gamification (new — optional, parent-toggleable per plan.md)
+// ---------------------------------------------------------------------------
+
+model Achievement {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique
+  title       String
+  description String?
+  criteria    Json // e.g. {"type":"streak_days","value":7} or {"type":"topics_mastered","value":10}
+  points      Int      @default(10)
+  createdAt   DateTime @default(now())
+
+  childAchievements ChildAchievement[]
+}
+
+model ChildAchievement {
+  id            Int      @id @default(autoincrement())
+  childId       Int
+  achievementId Int
+  earnedAt      DateTime @default(now())
+
+  child       Child       @relation(fields: [childId], references: [id], onDelete: Cascade)
+  achievement Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@unique([childId, achievementId])
+}
+
+model ChildGamificationState {
+  id                  Int       @id @default(autoincrement())
+  childId             Int       @unique
+  totalPoints         Int       @default(0)
+  level               Int       @default(1)
+  currentStreakDays   Int       @default(0)
+  longestStreakDays   Int       @default(0)
+  lastActivityDate    DateTime?
+  gamificationEnabled Boolean   @default(true)
+  updatedAt           DateTime  @updatedAt
+
+  child Child @relation(fields: [childId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// Kids Mode activity tracking (new — the original had no persisted equivalent)
+// ---------------------------------------------------------------------------
+
+model KidsActivityEvent {
+  id        Int      @id @default(autoincrement())
+  childId   Int
+  topicId   Int?
+  eventType String // 'topic_opened' | 'topic_closed' | 'material_opened'
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  child Child  @relation(fields: [childId], references: [id], onDelete: Cascade)
+  topic Topic? @relation(fields: [topicId], references: [id], onDelete: SetNull)
+
+  @@index([childId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Rich content & media (new — a deliberately leaner rewrite of the original's
+// ~90-column file_metadata/file_security_logs/file_access_permissions trio; see the
+// parity audit for why the ACL/security-log subsystem was not ported)
+// ---------------------------------------------------------------------------
+
+model FileAsset {
+  id             Int      @id @default(autoincrement())
+  ownerUserId    Int
+  topicId        Int?
+  kind           String // 'image' | 'video_link' | 'document' | 'markdown'
+  originalName   String
+  storedFilename String? // null for kind='video_link' (url-only, nothing stored on disk)
+  mimeType       String?
+  sizeBytes      Int?
+  url            String? // external link for kind='video_link', or the served path for stored files
+  label          String?
+  createdAt      DateTime @default(now())
+
+  owner User   @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  topic Topic? @relation(fields: [topicId], references: [id], onDelete: SetNull)
+
+  @@index([topicId])
+  @@index([ownerUserId])
+}
+
+// ---------------------------------------------------------------------------
+// Curriculum decomposition engine (new — src-v2/plan2.md)
+//
+// This is the *canonical* layer: a reusable Curriculum → Unit → Topic tree with
+// Skills/LearningObjectives/Prerequisites and a generated Lesson/Assessment bank,
+// owned by the parent account (not child-scoped). It is deliberately separate from
+// the existing child-scoped Subject → Unit → Topic → Lesson tree above, which
+// remains the per-child *instance* layer (plan2.md §37). "Adopting" a curriculum for
+// a child copies this canonical tree into real Subject/Unit/Topic/Lesson/Assessment
+// rows (see ChildCurriculum + the /adopt route) rather than duplicating it wholesale
+// or re-running AI generation per child.
+// ---------------------------------------------------------------------------
+
+model Curriculum {
+  id                      Int       @id @default(autoincrement())
+  userId                  Int
+  title                   String
+  subjectArea             String
+  gradeLevel              String?
+  schoolYear              String?
+  sourceType              String    @default("parent_created") // school | parent_created | ai_generated | imported | custom
+  sourceName              String?
+  sourceUrl               String?
+  rawText                 String // the pasted curriculum description — never overwritten (plan2.md §3)
+  status                  String    @default("draft") // draft|analyzing|outline_generated|awaiting_approval|generating_lessons|ready|archived|failed
+  masteryThresholdPercent Int       @default(70)
+  outlineApprovedAt       DateTime?
+  outlineApprovedByUserId Int?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  units          CurriculumUnit[]
+  aiGenerations  AiGeneration[]
+  childCurricula ChildCurriculum[]
+
+  @@index([userId])
+}
+
+model CurriculumUnit {
+  id           Int      @id @default(autoincrement())
+  curriculumId Int
+  title        String
+  description  String?
+  sortOrder    Int      @default(0)
+  confidence   String   @default("inferred") // explicit | inferred
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  curriculum Curriculum        @relation(fields: [curriculumId], references: [id], onDelete: Cascade)
+  topics     CurriculumTopic[]
+
+  @@index([curriculumId])
+}
+
+model CurriculumTopic {
+  id                   Int      @id @default(autoincrement())
+  curriculumUnitId     Int
+  title                String
+  description          String?
+  sortOrder            Int      @default(0)
+  confidence           String   @default("inferred") // explicit | inferred
+  sourceExcerpt        String?
+  estimatedLessonCount Int?
+  lessonPlanStatus     String   @default("pending") // pending | generating | generated | failed
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  unit          CurriculumUnit           @relation(fields: [curriculumUnitId], references: [id], onDelete: Cascade)
+  skills        CurriculumSkill[]
+  objectives    CurriculumObjective[]
+  lessons       CurriculumLesson[]
+  assessment    CurriculumAssessment?
+  prerequisites CurriculumPrerequisite[] @relation("TopicPrerequisites")
+  requiredBy    CurriculumPrerequisite[] @relation("TopicRequiredBy")
+  realTopics    Topic[]
+
+  @@index([curriculumUnitId])
+}
+
+model CurriculumSkill {
+  id                Int    @id @default(autoincrement())
+  curriculumTopicId Int
+  title             String
+  sortOrder         Int    @default(0)
+
+  topic               CurriculumTopic       @relation(fields: [curriculumTopicId], references: [id], onDelete: Cascade)
+  objectives          CurriculumObjective[]
+  curriculumQuestions CurriculumQuestion[]
+  taggedQuestions     Question[]
+
+  @@index([curriculumTopicId])
+}
+
+model CurriculumObjective {
+  id                Int    @id @default(autoincrement())
+  curriculumTopicId Int
+  curriculumSkillId Int?
+  description       String
+  sortOrder         Int    @default(0)
+
+  topic CurriculumTopic  @relation(fields: [curriculumTopicId], references: [id], onDelete: Cascade)
+  skill CurriculumSkill? @relation(fields: [curriculumSkillId], references: [id], onDelete: SetNull)
+
+  @@index([curriculumTopicId])
+  @@index([curriculumSkillId])
+}
+
+// Self-referencing edge on CurriculumTopic (plan2.md §9's prerequisite graph). Resolved
+// into the existing child-scoped Topic.prerequisites Json field at adoption time.
+model CurriculumPrerequisite {
+  id              Int @id @default(autoincrement())
+  topicId         Int
+  requiresTopicId Int
+
+  topic         CurriculumTopic @relation("TopicPrerequisites", fields: [topicId], references: [id], onDelete: Cascade)
+  requiresTopic CurriculumTopic @relation("TopicRequiredBy", fields: [requiresTopicId], references: [id], onDelete: Cascade)
+
+  @@unique([topicId, requiresTopicId])
+}
+
+model CurriculumLesson {
+  id                Int      @id @default(autoincrement())
+  curriculumTopicId Int
+  title             String
+  sequenceNumber    Int      @default(0)
+  lessonType        String   @default("instruction")
+  estimatedMinutes  Int      @default(30)
+  generationId      Int?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  topic       CurriculumTopic           @relation(fields: [curriculumTopicId], references: [id], onDelete: Cascade)
+  generation  AiGeneration?             @relation(fields: [generationId], references: [id], onDelete: SetNull)
+  sections    CurriculumLessonSection[]
+  realLessons Lesson[]
+
+  @@index([curriculumTopicId])
+}
+
+model CurriculumLessonSection {
+  id                 Int     @id @default(autoincrement())
+  curriculumLessonId Int
+  kind               String
+  content            String
+  sortOrder          Int     @default(0)
+  interactionType    String? // mirrors LessonSection — copied verbatim at curriculum adoption time
+  choices            Json?
+  correctAnswer      Json?
+  hints              Json?
+
+  lesson CurriculumLesson @relation(fields: [curriculumLessonId], references: [id], onDelete: Cascade)
+
+  @@index([curriculumLessonId])
+}
+
+model CurriculumAssessment {
+  id                Int      @id @default(autoincrement())
+  curriculumTopicId Int      @unique
+  title             String
+  generationId      Int?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  topic      CurriculumTopic      @relation(fields: [curriculumTopicId], references: [id], onDelete: Cascade)
+  generation AiGeneration?        @relation(fields: [generationId], references: [id], onDelete: SetNull)
+  questions  CurriculumQuestion[]
+}
+
+model CurriculumQuestion {
+  id                     Int    @id @default(autoincrement())
+  curriculumAssessmentId Int
+  type                   String
+  prompt                 String
+  choices                Json?
+  correctAnswer          Json?
+  difficultyLevel        String @default("medium")
+  curriculumSkillId      Int?
+  sortOrder              Int    @default(0)
+
+  assessment CurriculumAssessment @relation(fields: [curriculumAssessmentId], references: [id], onDelete: Cascade)
+  skill      CurriculumSkill?     @relation(fields: [curriculumSkillId], references: [id], onDelete: SetNull)
+
+  @@index([curriculumAssessmentId])
+}
+
+// The per-child adoption record (plan2.md §37's "ChildLearningPlan"): marks that a
+// child has had this canonical Curriculum copied into their real Subject/Unit/Topic
+// tree (via subjectId), without duplicating the canonical content per child.
+model ChildCurriculum {
+  id           Int      @id @default(autoincrement())
+  childId      Int
+  curriculumId Int
+  subjectId    Int
+  status       String   @default("active") // active | archived
+  adoptedAt    DateTime @default(now())
+
+  child      Child      @relation(fields: [childId], references: [id], onDelete: Cascade)
+  curriculum Curriculum @relation(fields: [curriculumId], references: [id], onDelete: Cascade)
+  subject    Subject    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@unique([childId, curriculumId])
+  @@index([childId])
+}

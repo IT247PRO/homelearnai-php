@@ -1,0 +1,21 @@
+{
+  "app.name": "HomeLearnAI",
+  "nav.children": "Hijos",
+  "nav.kidsMode": "Modo Niños",
+  "nav.logout": "Cerrar sesión",
+  "login.title": "Iniciar sesión",
+  "login.email": "Correo electrónico",
+  "login.password": "Contraseña",
+  "login.submit": "Iniciar sesión",
+  "login.submitting": "Iniciando sesión…",
+  "login.noAccount": "¿No tienes cuenta?",
+  "login.register": "Regístrate",
+  "register.title": "Crear una cuenta de padre",
+  "register.name": "Nombre",
+  "register.email": "Correo electrónico",
+  "register.password": "Contraseña",
+  "register.submit": "Crear cuenta",
+  "register.submitting": "Creando cuenta…",
+  "register.haveAccount": "¿Ya tienes una cuenta?",
+  "register.login": "Iniciar sesión"
+}

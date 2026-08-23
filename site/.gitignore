@@ -1,6 +1,0 @@
-node_modules/
-.wrangler/
-.env
-.env.local
-dist/
-build/

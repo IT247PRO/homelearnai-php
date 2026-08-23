@@ -1,3 +1,0 @@
-{
-  "*.php": ["./vendor/bin/pint"]
-}

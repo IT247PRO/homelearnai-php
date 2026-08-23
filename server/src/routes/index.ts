@@ -1,0 +1,97 @@
+import { Router } from 'express';
+import { router as authRouter } from './auth.js';
+import { router as childrenRouter } from './children.js';
+import * as subjects from './subjects.js';
+import * as units from './units.js';
+import * as topics from './topics.js';
+import * as flashcards from './flashcards.js';
+import * as reviews from './reviews.js';
+import * as ai from './ai.js';
+import { router as kidsModeRouter } from './kidsMode.js';
+import { router as kidsRouter } from './kids.js';
+import * as timeBlocks from './timeBlocks.js';
+import * as learningSessions from './learningSessions.js';
+import * as catchUpSessions from './catchUpSessions.js';
+import * as flashcardBulk from './flashcardBulk.js';
+import * as mastery from './mastery.js';
+import * as lessons from './lessons.js';
+import * as assessments from './assessments.js';
+import * as gamification from './gamification.js';
+import * as dashboard from './dashboard.js';
+import { router as tasksRouter } from './tasks.js';
+import * as reviewSlots from './reviewSlots.js';
+import { router as onboardingRouter } from './onboarding.js';
+import * as topicMaterials from './topicMaterials.js';
+import * as planning from './planning.js';
+import { router as tutorRouter } from './tutor.js';
+import * as curricula from './curricula.js';
+import * as curriculumStructure from './curriculumStructure.js';
+import { router as kidsLessonsRouter } from './kidsLessons.js';
+
+export const router = Router();
+
+router.get('/health', (_req, res) => {
+  res.json({ status: 'ok' });
+});
+
+router.use('/auth', authRouter);
+router.use('/children', childrenRouter);
+
+// Nested collection routes (list/create scoped to a parent id).
+router.use('/children/:childId/subjects', subjects.nestedRouter);
+router.use('/children/:childId/reviews', reviews.nestedRouter);
+router.use('/children/:childId/ai', ai.nestedRouter);
+router.use('/children/:childId/time-blocks', timeBlocks.nestedRouter);
+router.use('/children/:childId/learning-sessions', learningSessions.nestedRouter);
+router.use('/children/:childId/catch-up-sessions', catchUpSessions.nestedRouter);
+router.use('/subjects/:subjectId/units', units.nestedRouter);
+router.use('/units/:unitId/topics', topics.nestedRouter);
+router.use('/topics/:topicId/flashcards', flashcards.nestedRouter);
+router.use('/topics/:topicId/flashcards', flashcardBulk.topicBulkRouter);
+router.use('/units/:unitId/flashcards', flashcardBulk.unitExportRouter);
+router.use('/children/:childId/mastery', mastery.nestedRouter);
+router.use('/topics/:topicId/lessons', lessons.nestedRouter);
+router.use('/topics/:topicId/assessments', assessments.nestedRouter);
+router.use('/topics/:topicId/ai', ai.topicAiRouter);
+router.use('/children/:childId/gamification', gamification.nestedRouter);
+router.use('/children/:childId/dashboard', dashboard.nestedRouter);
+router.use('/dashboard', dashboard.parentRouter);
+router.use('/children/:childId/review-slots', reviewSlots.nestedRouter);
+router.use('/children/:childId/planning', planning.nestedRouter);
+router.use('/tasks', tasksRouter);
+router.use('/onboarding', onboardingRouter);
+router.use('/topics/:topicId/materials', topicMaterials.nestedRouter);
+router.use('/topics/:topicId/content', topicMaterials.contentRouter);
+router.use('/topics/:topicId/tutor', tutorRouter);
+router.use('/children/:childId/curricula', curricula.childNestedRouter);
+router.use('/curricula/:curriculumId/units', curriculumStructure.unitNestedRouter);
+router.use('/curriculum-units/:unitId/topics', curriculumStructure.topicNestedRouter);
+
+// Direct-id CRUD routes.
+router.use('/subjects', subjects.itemRouter);
+router.use('/units', units.itemRouter);
+router.use('/topics', topics.itemRouter);
+router.use('/flashcards', flashcards.itemRouter);
+router.use('/flashcards', flashcardBulk.moveRouter);
+router.use('/reviews', reviews.itemRouter);
+router.use('/study-plans', ai.studyPlanRouter);
+router.use('/ai-settings', ai.settingsRouter);
+router.use('/kids-mode', kidsModeRouter);
+router.use('/kids', kidsRouter);
+router.use('/kids', kidsLessonsRouter);
+router.use('/time-blocks', timeBlocks.itemRouter);
+router.use('/learning-sessions', learningSessions.itemRouter);
+router.use('/catch-up-sessions', catchUpSessions.itemRouter);
+router.use('/lessons', lessons.itemRouter);
+router.use('/assessments', assessments.itemRouter);
+router.use('/assessment-attempts', assessments.attemptRouter);
+router.use('/review-slots', reviewSlots.itemRouter);
+router.use('/ai-recommendations', ai.recommendationsRouter);
+router.use('/file-assets', topicMaterials.itemRouter);
+router.use('/curricula', curricula.itemRouter);
+router.use('/curriculum-units', curriculumStructure.unitItemRouter);
+router.use('/curriculum-topics', curriculumStructure.topicItemRouter);
+router.use('/curriculum-topics', curricula.topicLessonRouter);
+router.use('/curriculum-skills', curriculumStructure.skillItemRouter);
+router.use('/curriculum-objectives', curriculumStructure.objectiveItemRouter);
+router.use('/curriculum-prerequisites', curriculumStructure.prerequisiteItemRouter);
