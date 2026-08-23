@@ -33,11 +33,15 @@ export function TutorChat({
   kidsStyle,
   lessonId,
   sectionId,
+  studyGuideVersionId,
+  conceptIndex,
 }: {
   messagesUrl: string;
   kidsStyle?: boolean;
   lessonId?: number;
   sectionId?: number;
+  studyGuideVersionId?: number;
+  conceptIndex?: number;
 }) {
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [messages, setMessages] = useState<TutorMessage[]>([]);
@@ -52,6 +56,8 @@ export function TutorChat({
         message,
         lessonId,
         sectionId,
+        studyGuideVersionId,
+        conceptIndex,
       });
       return data.data;
     },
@@ -94,7 +100,7 @@ export function TutorChat({
       {notConfigured && <p className="mb-2 rounded bg-amber-50 px-2 py-1.5 text-xs text-amber-800">{notConfigured}</p>}
       {error && <p className="mb-2 text-xs text-red-600">{error}</p>}
 
-      {lessonId && (
+      {(lessonId || studyGuideVersionId) && (
         <div className="mb-3 flex flex-wrap gap-2">
           {QUICK_ACTIONS.map((action) => (
             <button

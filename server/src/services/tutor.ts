@@ -3,6 +3,8 @@ import { prisma } from '../lib/prisma.js';
 import { HttpError } from '../middleware/errorHandler.js';
 import { AiNotConfiguredError, getAiProvider } from '../ai/provider.js';
 import { RICH_FORMATTING_INSTRUCTION } from '../ai/promptTemplates.js';
+import type { StudyGuideGeneration } from '../ai/schemas.js';
+import { pickStudyGuideConcept } from './studyGuideGeneration.js';
 import { ageGroupForGrade } from './qualityHeuristics.js';
 
 export const tutorReplySchema = z.object({
@@ -25,9 +27,24 @@ export interface LessonTutorContext {
   recentMistakes: string[];
 }
 
+/** When the child is reading the Study Guide (plan4.md §31) rather than the Lesson Player —
+ * mutually exclusive with LessonTutorContext in practice, since only one screen is ever
+ * active; if both are somehow present, the lesson context wins (see call site). */
+export interface StudyGuideTutorContext {
+  overview: string;
+  currentConceptTitle?: string;
+  currentConceptContent?: string;
+}
+
 /** Fixed, not user-editable — the safety/pedagogy rules from plan.md's "AI Tutor" and
  * "AI Safety for Children" sections apply to every conversation regardless of topic. */
-export function buildTutorSystemPrompt(ageGroup: string, topicTitle: string, topicContent: string | null, lessonContext?: LessonTutorContext): string {
+export function buildTutorSystemPrompt(
+  ageGroup: string,
+  topicTitle: string,
+  topicContent: string | null,
+  lessonContext?: LessonTutorContext,
+  studyGuideContext?: StudyGuideTutorContext
+): string {
   return `You are a patient, encouraging AI tutor helping a child in the ${ageGroup} age group understand "${topicTitle}".
 ${topicContent ? `Reference material for this topic:\n${topicContent}\n` : ''}${
     lessonContext
@@ -36,7 +53,13 @@ ${topicContent ? `Reference material for this topic:\n${topicContent}\n` : ''}${
             ? `The child recently answered incorrectly on: ${lessonContext.recentMistakes.join('; ')}. Keep this in mind if it's relevant.\n`
             : ''
         }Prioritize this exact lesson content over generic knowledge when answering.\n`
-      : ''
+      : studyGuideContext
+        ? `The child is currently reading the Study Guide for this topic.\nStudy Guide overview: ${studyGuideContext.overview}\n${
+            studyGuideContext.currentConceptTitle
+              ? `They are looking at the concept "${studyGuideContext.currentConceptTitle}":\n${studyGuideContext.currentConceptContent}\n`
+              : ''
+          }Prioritize this exact study guide content over generic knowledge when answering.\n`
+        : ''
   }
 Rules you must always follow:
 - Use vocabulary and sentence complexity appropriate for the ${ageGroup} age group.
@@ -55,6 +78,8 @@ export interface TutorMessageParams {
   topicId: number;
   lessonId?: number;
   sectionId?: number;
+  studyGuideVersionId?: number;
+  conceptIndex?: number;
   conversationId?: number;
   message: string;
 }
@@ -86,6 +111,16 @@ async function buildLessonContext(childId: number, lessonId: number, sectionId?:
   };
 }
 
+/** Only a *published* version belonging to this exact topic is ever eligible — a child must
+ * never get tutor context sourced from a draft they can't otherwise see (plan4 §19/§45). */
+async function buildStudyGuideContext(topicId: number, studyGuideVersionId: number, conceptIndex?: number): Promise<StudyGuideTutorContext | undefined> {
+  const version = await prisma.studyGuideVersion.findFirst({
+    where: { id: studyGuideVersionId, status: 'published', studyGuide: { topicId } },
+  });
+  if (!version) return undefined;
+  return pickStudyGuideConcept(version.content as unknown as StudyGuideGeneration, conceptIndex);
+}
+
 /**
  * Shared by both tutor surfaces — the parent-authenticated preview in the curriculum view
  * and the Kids Mode "ask a question" action — so the safety prompt, history handling, and
@@ -103,10 +138,21 @@ export async function postTutorMessage(params: TutorMessageParams) {
   const conversation = params.conversationId
     ? await prisma.aiConversation.findUniqueOrThrow({ where: { id: params.conversationId } })
     : await prisma.aiConversation.create({
-        data: { userId: params.userId, childId: params.childId, topicId: params.topicId, lessonId: params.lessonId, kind: 'tutor' },
+        data: {
+          userId: params.userId,
+          childId: params.childId,
+          topicId: params.topicId,
+          lessonId: params.lessonId,
+          studyGuideVersionId: params.studyGuideVersionId,
+          kind: 'tutor',
+        },
       });
 
   const lessonContext = params.lessonId ? await buildLessonContext(params.childId, params.lessonId, params.sectionId) : undefined;
+  const studyGuideContext =
+    !params.lessonId && params.studyGuideVersionId
+      ? await buildStudyGuideContext(params.topicId, params.studyGuideVersionId, params.conceptIndex)
+      : undefined;
 
   const history = await prisma.aiMessage.findMany({
     where: { conversationId: conversation.id },
@@ -122,7 +168,7 @@ export async function postTutorMessage(params: TutorMessageParams) {
   });
 
   const ageGroup = ageGroupForGrade(child.grade);
-  const systemPrompt = buildTutorSystemPrompt(ageGroup, topic.title, topic.learningContent, lessonContext);
+  const systemPrompt = buildTutorSystemPrompt(ageGroup, topic.title, topic.learningContent, lessonContext, studyGuideContext);
   const conversationText = [...history.map((m) => `${m.role === 'user' ? 'Child' : 'Tutor'}: ${m.content}`), `Child: ${params.message}`].join('\n');
 
   const provider = getAiProvider();

@@ -11,6 +11,7 @@ import KidsModeSettingsPage from './pages/KidsModeSettingsPage';
 import KidsHomePage from './pages/KidsHomePage';
 import KidsReviewPage from './pages/KidsReviewPage';
 import KidsLessonPage from './pages/KidsLessonPage';
+import KidsStudyGuidePage from './pages/KidsStudyGuidePage';
 import KidsAssessmentPage from './pages/KidsAssessmentPage';
 import TasksPage from './pages/TasksPage';
 import FlashcardPreviewPage from './pages/FlashcardPreviewPage';
@@ -187,6 +188,7 @@ export default function App() {
       <Route path="/kids" element={<KidsHomePage />} />
       <Route path="/kids/review" element={<KidsReviewPage />} />
       <Route path="/kids/lessons/:lessonId" element={<KidsLessonPage />} />
+      <Route path="/kids/topics/:topicId/study-guide" element={<KidsStudyGuidePage />} />
       <Route path="/kids/assessments/:assessmentId" element={<KidsAssessmentPage />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>

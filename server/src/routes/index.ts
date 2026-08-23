@@ -27,6 +27,7 @@ import { router as tutorRouter } from './tutor.js';
 import * as curricula from './curricula.js';
 import * as curriculumStructure from './curriculumStructure.js';
 import { router as kidsLessonsRouter } from './kidsLessons.js';
+import { router as studyGuideRouter } from './studyGuide.js';
 
 export const router = Router();
 
@@ -63,6 +64,7 @@ router.use('/onboarding', onboardingRouter);
 router.use('/topics/:topicId/materials', topicMaterials.nestedRouter);
 router.use('/topics/:topicId/content', topicMaterials.contentRouter);
 router.use('/topics/:topicId/tutor', tutorRouter);
+router.use('/topics/:topicId/study-guide', studyGuideRouter);
 router.use('/children/:childId/curricula', curricula.childNestedRouter);
 router.use('/curricula/:curriculumId/units', curriculumStructure.unitNestedRouter);
 router.use('/curriculum-units/:unitId/topics', curriculumStructure.topicNestedRouter);

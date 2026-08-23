@@ -229,3 +229,54 @@ export const assessmentGenerationSchema = z.object({
     .max(30),
 });
 export type AssessmentGeneration = z.infer<typeof assessmentGenerationSchema>;
+
+// ---------------------------------------------------------------------------
+// Study Guide generation (plan4.md §51's structured-output shape) — a synthesized
+// conceptual map of a topic, not a summary of any single lesson (plan4 §61).
+// ---------------------------------------------------------------------------
+
+export const studyGuideConceptSchema = z.object({
+  title: z.string().min(1).max(255),
+  simpleExplanation: z.string().min(1).max(2000),
+  detailedExplanation: z.string().min(1).max(8000),
+  example: z.string().max(2000).optional(),
+  realWorldApplication: z.string().max(1000).optional(),
+  commonMisconceptions: z.array(z.string().max(500)).max(5).optional(),
+});
+
+export const studyGuideVocabularyTermSchema = z.object({
+  term: z.string().min(1).max(255),
+  definition: z.string().min(1).max(1000),
+  childFriendlyExplanation: z.string().max(1000).optional(),
+  example: z.string().max(500).optional(),
+});
+
+export const studyGuideQuestionSchema = z.object({
+  question: z.string().min(1).max(2000),
+  answer: z.string().min(1).max(2000),
+  explanation: z.string().max(1000).optional(),
+});
+
+// A second, separately-constructed schema with the identical shape — not a reuse of
+// studyGuideQuestionSchema. zod-to-json-schema dedupes by object identity, and factoring two
+// array fields into the same Zod object reference makes it emit an internal $ref (e.g.
+// "#/definitions/response/properties/practiceQuestions/items") that Ollama's grammar
+// compiler (llama.cpp) cannot resolve once toJsonSchema() extracts the root definition —
+// observed directly: "Error resolving ref ... definitions not in {...}". Every schema in
+// this file must be fully inlined for that reason (see stripLengthConstraints's comment in
+// ollama.ts for the sibling constraint on length limits).
+export const studyGuideReviewQuestionSchema = z.object({
+  question: z.string().min(1).max(2000),
+  answer: z.string().min(1).max(2000),
+  explanation: z.string().max(1000).optional(),
+});
+
+export const studyGuideGenerationSchema = z.object({
+  overview: z.string().min(1).max(4000),
+  learningObjectives: z.array(z.string().min(1).max(500)).min(1).max(15),
+  concepts: z.array(studyGuideConceptSchema).min(1).max(20),
+  vocabulary: z.array(studyGuideVocabularyTermSchema).max(30).optional(),
+  practiceQuestions: z.array(studyGuideQuestionSchema).max(20).optional(),
+  reviewQuestions: z.array(studyGuideReviewQuestionSchema).max(20).optional(),
+});
+export type StudyGuideGeneration = z.infer<typeof studyGuideGenerationSchema>;

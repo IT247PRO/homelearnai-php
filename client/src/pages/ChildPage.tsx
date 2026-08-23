@@ -31,6 +31,7 @@ import { AppLayout } from '../components/AppLayout';
 import { ChildNavHeader } from '../components/ChildNavHeader';
 import { RichContent } from '../components/RichContent';
 import { LessonsAndAssessmentsSection } from '../components/LessonsAndAssessments';
+import { StudyGuideSection } from '../components/StudyGuideSection';
 import { MasterySection } from '../components/MasterySection';
 import { LearningProfileSection } from '../components/LearningProfileSection';
 import { InsightsSection } from '../components/InsightsSection';
@@ -109,8 +110,8 @@ export default function ChildPage() {
   // Layout mode: 'standard' (3 cols) | 'expanded' (Left + Wide Middle) | 'focus' (Full Width Studio)
   const [layoutMode, setLayoutMode] = useState<'standard' | 'expanded' | 'focus'>('standard');
 
-  // Middle tab selection: 'materials' | 'lessons' | 'flashcards'
-  const [middleTab, setMiddleTab] = useState<'materials' | 'lessons' | 'flashcards'>('materials');
+  // Middle tab selection: 'materials' | 'lessons' | 'flashcards' | 'study-guide'
+  const [middleTab, setMiddleTab] = useState<'materials' | 'lessons' | 'flashcards' | 'study-guide'>('materials');
 
   // Right sidebar tab: 'tutor' | 'profile_insights' | 'mastery_ops'
   const [rightTab, setRightTab] = useState<'tutor' | 'profile_insights' | 'mastery_ops'>('tutor');
@@ -769,8 +770,8 @@ interface MiddleTopicStudioProps {
   childId: number;
   selectedTopicId: number | null;
   activeSubject?: Subject;
-  activeTab: 'materials' | 'lessons' | 'flashcards';
-  onChangeTab: (tab: 'materials' | 'lessons' | 'flashcards') => void;
+  activeTab: 'materials' | 'lessons' | 'flashcards' | 'study-guide';
+  onChangeTab: (tab: 'materials' | 'lessons' | 'flashcards' | 'study-guide') => void;
   onSelectTopic: (id: number | null) => void;
   layoutMode?: 'standard' | 'expanded' | 'focus';
   onToggleExpand?: () => void;
@@ -1027,6 +1028,17 @@ function MiddleTopicStudio({
             <Brain className="h-3.5 w-3.5" />
             <span>Flashcards</span>
           </button>
+          <button
+            onClick={() => onChangeTab('study-guide')}
+            className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
+              activeTab === 'study-guide'
+                ? 'bg-slate-800 text-white shadow-soft-xs'
+                : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <BookOpen className="h-3.5 w-3.5" />
+            <span>Study Guide</span>
+          </button>
         </div>
       </div>
 
@@ -1037,6 +1049,7 @@ function MiddleTopicStudio({
           <LessonsAndAssessmentsSection topicId={selectedTopicId} childId={childId} />
         )}
         {activeTab === 'flashcards' && <MiddleFlashcardsTab topicId={selectedTopicId} />}
+        {activeTab === 'study-guide' && <StudyGuideSection topicId={selectedTopicId} />}
       </div>
     </div>
   );

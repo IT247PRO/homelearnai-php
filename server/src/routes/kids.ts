@@ -94,6 +94,7 @@ router.get('/overview', async (req, res, next) => {
                   flashcards: { select: { id: true } },
                   fileAssets: { select: { id: true, kind: true, label: true, originalName: true, url: true } },
                   masteries: { where: { childId }, select: { state: true, accuracy: true } },
+                  studyGuide: { select: { versions: { where: { status: 'published' }, select: { id: true }, take: 1 } } },
                 },
               },
             },
@@ -345,6 +346,27 @@ router.get('/topics/:topicId/materials', async (req, res, next) => {
   }
 });
 
+// Only ever returns the published version — a child never sees a draft awaiting parent
+// review (plan4.md §19/§45). Never 404s for "none generated yet", mirrors /materials above.
+router.get('/topics/:topicId/study-guide', async (req, res, next) => {
+  try {
+    const topicId = Number(req.params.topicId);
+    const topic = await prisma.topic.findUnique({
+      where: { id: topicId },
+      include: { unit: { include: { subject: true } } },
+    });
+    if (!topic || topic.unit.subject.childId !== req.kidsSession!.childId) throw new HttpError(404, 'not_found');
+
+    const version = await prisma.studyGuideVersion.findFirst({
+      where: { status: 'published', studyGuide: { topicId } },
+      orderBy: { versionNumber: 'desc' },
+    });
+    res.json({ data: version ?? null });
+  } catch (err) {
+    next(err);
+  }
+});
+
 const activitySchema = z.object({
   eventType: z.enum(['topic_opened', 'topic_closed', 'material_opened']),
   metadata: z.unknown().optional(),
@@ -374,6 +396,8 @@ const tutorMessageSchema = z.object({
   message: z.string().min(1).max(2000),
   lessonId: z.number().int().optional(),
   sectionId: z.number().int().optional(),
+  studyGuideVersionId: z.number().int().optional(),
+  conceptIndex: z.number().int().min(0).optional(),
 });
 
 // Same postTutorMessage service the parent-facing preview uses (routes/tutor.ts) — the
@@ -394,6 +418,8 @@ router.post('/topics/:topicId/tutor/messages', async (req, res, next) => {
       topicId,
       lessonId: body.lessonId,
       sectionId: body.sectionId,
+      studyGuideVersionId: body.studyGuideVersionId,
+      conceptIndex: body.conceptIndex,
       conversationId: body.conversationId,
       message: body.message,
     });

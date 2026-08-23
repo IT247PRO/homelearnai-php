@@ -94,6 +94,7 @@ interface TopicItem {
   flashcards: { id: number; front?: string; back?: string }[];
   fileAssets?: { id: number; kind: string; label: string | null; originalName: string; url: string | null }[];
   masteries?: { state: string; accuracy: number | null }[];
+  studyGuide?: { versions: { id: number }[] } | null;
 }
 
 interface UnitItem {
@@ -922,6 +923,16 @@ export default function KidsHomePage() {
                     </div>
                   </div>
                 </article>
+
+                {Boolean(currentChapter.topic.studyGuide?.versions.length) && (
+                  <Link
+                    to={`/kids/topics/${currentChapter.topic.id}/study-guide`}
+                    className="flex items-center justify-center gap-2 rounded-2xl border border-indigo-200 bg-indigo-50 py-3 text-sm font-bold text-indigo-700 hover:bg-indigo-100 transition-all"
+                  >
+                    <BookOpen className="h-4 w-4" />
+                    <span>📘 Open Study Guide</span>
+                  </Link>
+                )}
 
                 {/* 4. INLINE INTERACTIVE CHECKPOINT: Flashcard Practice (No Modals!) */}
                 {currentChapter.topic.flashcards && currentChapter.topic.flashcards.length > 0 && (

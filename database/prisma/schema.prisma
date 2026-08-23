@@ -144,6 +144,7 @@ model Subject {
   child          Child?            @relation(fields: [childId], references: [id], onDelete: Cascade)
   units          Unit[]
   childCurricula ChildCurriculum[]
+  studyGuide     StudyGuide?
 
   @@index([userId])
   @@index([childId])
@@ -163,6 +164,7 @@ model Unit {
   topics           Topic[]
   flashcardImports FlashcardImport[]
   assessments      Assessment[]
+  studyGuide       StudyGuide?
 
   @@index([subjectId])
 }
@@ -198,9 +200,65 @@ model Topic {
   activityEvents   KidsActivityEvent[]
   fileAssets       FileAsset[]
   aiConversations  AiConversation[]
+  studyGuide       StudyGuide?
 
   @@index([unitId])
   @@index([curriculumTopicId])
+}
+
+// ---------------------------------------------------------------------------
+// Study Guide system (plan4.md) — one canonical guide per curriculum scope,
+// versioned (plan4 §18), with an explicit draft/publish gate before Kids Mode
+// sees it (plan4 §19). Phase 1 only ever creates topicId-scoped rows; the other
+// three FKs exist now so Subject/Unit/Lesson scope (Phase 2) is additive.
+// `status` lives on the version, not here, so a parent can regenerate/review a
+// draft without it ever affecting what's currently published to the child —
+// Kids Mode queries for status:'published' directly and never reads currentVersionId.
+model StudyGuide {
+  id               Int      @id @default(autoincrement())
+  scopeType        String // 'subject' | 'unit' | 'topic' | 'lesson' — Phase 1 only ever writes 'topic'
+  subjectId        Int?
+  unitId           Int?
+  topicId          Int?
+  lessonId         Int?
+  currentVersionId Int?     @unique
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  subject        Subject?            @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  unit           Unit?               @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  topic          Topic?              @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  lesson         Lesson?             @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  currentVersion StudyGuideVersion?  @relation("CurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
+  versions       StudyGuideVersion[] @relation("VersionsOfGuide")
+
+  @@unique([subjectId])
+  @@unique([unitId])
+  @@unique([topicId])
+  @@unique([lessonId])
+}
+
+// Immutable per-generation snapshot (plan4 §18: "do not destroy the previous version when
+// regenerating"). `content` is one validated JSON blob rather than relational concept/
+// vocabulary tables — matches this schema's existing convention for structured-but-non-
+// interactive content (Topic.contentAssets, AiRecommendation.payload); nothing here needs
+// per-row interactivity the way LessonSection does.
+model StudyGuideVersion {
+  id            Int      @id @default(autoincrement())
+  studyGuideId  Int
+  versionNumber Int
+  status        String   @default("draft") // draft | published | archived
+  content       Json // validated against studyGuideGenerationSchema (ai/schemas.ts) before write
+  reason        String?
+  generationId  Int?
+  createdAt     DateTime @default(now())
+
+  studyGuide      StudyGuide       @relation("VersionsOfGuide", fields: [studyGuideId], references: [id], onDelete: Cascade)
+  currentForGuide StudyGuide?      @relation("CurrentVersion")
+  generation      AiGeneration?    @relation(fields: [generationId], references: [id], onDelete: SetNull)
+  conversations   AiConversation[]
+
+  @@index([studyGuideId])
 }
 
 model Flashcard {
@@ -430,26 +488,29 @@ model AiPromptTemplate {
 }
 
 model AiConversation {
-  id        Int      @id @default(autoincrement())
-  userId    Int
-  childId   Int?
-  topicId   Int?
-  lessonId  Int?
-  kind      String
-  status    String   @default("active")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                  Int      @id @default(autoincrement())
+  userId              Int
+  childId             Int?
+  topicId             Int?
+  lessonId            Int?
+  studyGuideVersionId Int?
+  kind                String
+  status              String   @default("active")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
-  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  child       Child?         @relation(fields: [childId], references: [id], onDelete: Cascade)
-  topic       Topic?         @relation(fields: [topicId], references: [id], onDelete: Cascade)
-  lesson      Lesson?        @relation(fields: [lessonId], references: [id], onDelete: SetNull)
-  messages    AiMessage[]
-  generations AiGeneration[]
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  child             Child?             @relation(fields: [childId], references: [id], onDelete: Cascade)
+  topic             Topic?             @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  lesson            Lesson?            @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  studyGuideVersion StudyGuideVersion? @relation(fields: [studyGuideVersionId], references: [id], onDelete: SetNull)
+  messages          AiMessage[]
+  generations       AiGeneration[]
 
   @@index([userId])
   @@index([childId])
   @@index([topicId])
+  @@index([studyGuideVersionId])
 }
 
 model AiMessage {
@@ -505,6 +566,7 @@ model AiGeneration {
   assessments           Assessment[]
   curriculumLessons     CurriculumLesson[]
   curriculumAssessments CurriculumAssessment[]
+  studyGuideVersions    StudyGuideVersion[]
 
   @@index([userId])
   @@index([childId])
@@ -642,6 +704,7 @@ model Lesson {
   studyPlanItems   StudyPlanItem[]
   progress         LessonProgress[]
   aiConversations  AiConversation[]
+  studyGuide       StudyGuide?
 
   @@index([topicId])
   @@index([curriculumLessonId])

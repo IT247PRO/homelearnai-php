@@ -18,6 +18,8 @@ const messageSchema = z.object({
   message: z.string().min(1).max(2000),
   lessonId: z.number().int().optional(),
   sectionId: z.number().int().optional(),
+  studyGuideVersionId: z.number().int().optional(),
+  conceptIndex: z.number().int().min(0).optional(),
 });
 
 router.post('/messages', requireOwnership('topic', 'topicId'), aiGenerationRateLimiter, async (req, res, next) => {
@@ -36,6 +38,8 @@ router.post('/messages', requireOwnership('topic', 'topicId'), aiGenerationRateL
       topicId,
       lessonId: body.lessonId,
       sectionId: body.sectionId,
+      studyGuideVersionId: body.studyGuideVersionId,
+      conceptIndex: body.conceptIndex,
       conversationId: body.conversationId,
       message: body.message,
     });
