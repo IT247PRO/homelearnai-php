@@ -1,8 +1,14 @@
+import { fileURLToPath, URL } from 'node:url';
 import typography from '@tailwindcss/typography';
+
+// Absolute, not relative — the dev server (root server.ts) now runs Vite in middleware mode
+// from the repo root's cwd, not client/, so relative content globs resolved against cwd would
+// find nothing and silently emit zero utility classes (only Tailwind's base reset layer).
+const clientDir = fileURLToPath(new URL('.', import.meta.url));
 
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: ['./index.html', './src/**/*.{ts,tsx}'],
+  content: [`${clientDir}index.html`, `${clientDir}src/**/*.{ts,tsx}`],
   theme: {
     extend: {
       colors: {
