@@ -201,8 +201,8 @@ export default function KidsAssessmentPage() {
     <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* Top Header Bar */}
       <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200 shadow-soft-xs">
-        <div className="mx-auto max-w-4xl px-4 py-3 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+        <div className="mx-auto max-w-4xl px-3 sm:px-4 py-3 flex items-center justify-between gap-2 sm:gap-4">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <button
               onClick={() => {
                 if (answeredCount > 0) {
@@ -211,34 +211,35 @@ export default function KidsAssessmentPage() {
                   navigate('/kids');
                 }
               }}
-              className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-all"
+              className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-2.5 sm:px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-all shrink-0"
             >
               <ArrowLeft className="h-4 w-4" />
-              <span>Exit Quiz</span>
+              <span className="hidden sm:inline">Exit Quiz</span>
+              <span className="sm:hidden">Exit</span>
             </button>
 
-            <div>
-              <h1 className="text-sm font-black text-slate-900 leading-tight flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-purple-600" />
-                <span className="truncate max-w-[200px] sm:max-w-md">{assessmentQuery.data.title}</span>
+            <div className="min-w-0">
+              <h1 className="text-xs sm:text-sm font-black text-slate-900 leading-tight flex items-center gap-1.5 truncate">
+                <Sparkles className="h-3.5 sm:h-4 w-3.5 sm:w-4 text-purple-600 shrink-0" />
+                <span className="truncate max-w-[180px] sm:max-w-md">{assessmentQuery.data.title}</span>
               </h1>
-              <p className="text-[11px] font-semibold text-slate-500">
+              <p className="hidden sm:block text-[11px] font-semibold text-slate-500 truncate">
                 {childQuery.data?.name ? `${childQuery.data.name} • ` : ''}
                 {answeredCount} of {totalQuestions} answered ({Math.round(progressPercent)}%)
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {/* XP & Streak Gamification HUD */}
-            <div className="flex items-center gap-1.5 rounded-full bg-purple-50 px-3 py-1.5 border border-purple-200/60 shadow-soft-xs">
-              <Star className="h-4 w-4 text-amber-500 fill-amber-400" />
-              <span className="text-xs font-black text-purple-900">+15 XP</span>
+            <div className="flex items-center gap-1 sm:gap-1.5 rounded-full bg-purple-50 px-2.5 sm:px-3 py-1 sm:py-1.5 border border-purple-200/60 shadow-soft-xs">
+              <Star className="h-3.5 sm:h-4 w-3.5 sm:w-4 text-amber-500 fill-amber-400" />
+              <span className="text-[11px] sm:text-xs font-black text-purple-900">+15 XP</span>
             </div>
 
             {gamificationQuery.data?.currentStreakDays !== undefined && (
-              <div className="hidden sm:flex items-center gap-1.5 rounded-full bg-orange-50 px-3 py-1.5 border border-orange-200/60">
-                <Flame className="h-4 w-4 text-orange-500 fill-orange-400" />
+              <div className="hidden sm:flex items-center gap-1.5 rounded-full bg-orange-50 px-2.5 py-1 border border-orange-200/60">
+                <Flame className="h-3.5 w-3.5 text-orange-500 fill-orange-400" />
                 <span className="text-xs font-black text-orange-900">{gamificationQuery.data.currentStreakDays}d</span>
               </div>
             )}

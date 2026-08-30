@@ -111,6 +111,9 @@ export default function ChildPage() {
   // Layout mode: 'standard' (3 cols) | 'expanded' (Left + Wide Middle) | 'focus' (Full Width Studio)
   const [layoutMode, setLayoutMode] = useState<'standard' | 'expanded' | 'focus'>('standard');
 
+  // Mobile active panel on small screens (< lg): 'curriculum' | 'studio' | 'hub'
+  const [mobileView, setMobileView] = useState<'curriculum' | 'studio' | 'hub'>('studio');
+
   // Middle tab selection: 'materials' | 'lessons' | 'flashcards' | 'study-guide'
   const [middleTab, setMiddleTab] = useState<'materials' | 'lessons' | 'flashcards' | 'study-guide'>('materials');
 
@@ -139,8 +142,49 @@ export default function ChildPage() {
     <AppLayout>
       <ChildNavHeader childId={id} activeTab="curriculum" />
 
-      {/* Quick Layout Mode Switcher Toolbar */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white px-4 py-2.5 shadow-soft-sm">
+      {/* Mobile-Only Tab Switcher (Visible on < lg) */}
+      <div className="mb-4 lg:hidden">
+        <div className="flex items-center rounded-2xl border border-slate-100 bg-white p-1.5 shadow-soft-sm">
+          <button
+            onClick={() => setMobileView('curriculum')}
+            className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-bold transition-all ${
+              mobileView === 'curriculum'
+                ? 'bg-slate-900 text-white shadow-soft-xs'
+                : 'text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            <BookOpen className="h-3.5 w-3.5" />
+            <span>Curriculum</span>
+          </button>
+
+          <button
+            onClick={() => setMobileView('studio')}
+            className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-bold transition-all ${
+              mobileView === 'studio'
+                ? 'bg-gradient-to-tl from-purple-700 to-pink-500 text-white shadow-soft-xs'
+                : 'text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            <GraduationCap className="h-3.5 w-3.5" />
+            <span>Topic Studio</span>
+          </button>
+
+          <button
+            onClick={() => setMobileView('hub')}
+            className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-bold transition-all ${
+              mobileView === 'hub'
+                ? 'bg-purple-100 text-purple-800 shadow-soft-xs'
+                : 'text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            <span>AI Hub</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Desktop Layout Mode Switcher Toolbar (Hidden on mobile) */}
+      <div className="hidden lg:flex mb-4 flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white px-4 py-2.5 shadow-soft-sm">
         <div className="flex items-center gap-2">
           <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Workspace Layout:</span>
           <div className="inline-flex rounded-xl bg-slate-100 p-1">
@@ -196,38 +240,42 @@ export default function ChildPage() {
         </div>
       </div>
 
-      {/* 3-Column Interactive Learning Studio */}
+      {/* 3-Column Interactive Learning Studio with Mobile View Routing */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* ========================================================================= */}
         {/* LEFT COLUMN: Course & Curriculum Hierarchy (Subjects, Units, Topics)       */}
         {/* ========================================================================= */}
-        {layoutMode !== 'focus' && (
-          <div
-            className={`space-y-4 ${
-              layoutMode === 'expanded' ? 'lg:col-span-4 xl:col-span-3' : 'lg:col-span-4 xl:col-span-3'
-            }`}
-          >
-            <LeftCurriculumNavigator
-              childId={id}
-              subjects={subjectsQuery.data ?? []}
-              activeSubjectId={selectedSubjectId}
-              onSelectSubject={(subjectId) => {
-                setSelectedSubjectId(subjectId);
-                setSelectedUnitId(null);
-                setSelectedTopicId(null);
-              }}
-              selectedUnitId={selectedUnitId}
-              onSelectUnit={setSelectedUnitId}
-              selectedTopicId={selectedTopicId}
-              onSelectTopic={(topicId, unitId) => {
-                setSelectedTopicId(topicId);
-                if (unitId) setSelectedUnitId(unitId);
-              }}
-              searchQuery={topicSearch}
-              onSearchChange={setTopicSearch}
-            />
-          </div>
-        )}
+        <div
+          className={`space-y-4 ${
+            layoutMode === 'focus'
+              ? 'hidden'
+              : layoutMode === 'expanded'
+              ? 'lg:col-span-4 xl:col-span-3'
+              : 'lg:col-span-4 xl:col-span-3'
+          } ${mobileView === 'curriculum' ? 'block' : 'hidden lg:block'}`}
+        >
+          <LeftCurriculumNavigator
+            childId={id}
+            subjects={subjectsQuery.data ?? []}
+            activeSubjectId={selectedSubjectId}
+            onSelectSubject={(subjectId) => {
+              setSelectedSubjectId(subjectId);
+              setSelectedUnitId(null);
+              setSelectedTopicId(null);
+            }}
+            selectedUnitId={selectedUnitId}
+            onSelectUnit={setSelectedUnitId}
+            selectedTopicId={selectedTopicId}
+            onSelectTopic={(topicId, unitId) => {
+              setSelectedTopicId(topicId);
+              if (unitId) setSelectedUnitId(unitId);
+              // On mobile, auto-navigate to topic studio for instant feedback
+              setMobileView('studio');
+            }}
+            searchQuery={topicSearch}
+            onSearchChange={setTopicSearch}
+          />
+        </div>
 
         {/* ========================================================================= */}
         {/* MIDDLE COLUMN: Active Topic Learning Studio (Materials, Lessons, Cards)   */}
@@ -239,7 +287,7 @@ export default function ChildPage() {
               : layoutMode === 'expanded'
               ? 'lg:col-span-8 xl:col-span-9'
               : 'lg:col-span-8 xl:col-span-5'
-          }`}
+          } ${mobileView === 'studio' ? 'block' : 'hidden lg:block'}`}
         >
           <MiddleTopicStudio
             childId={id}
@@ -248,6 +296,7 @@ export default function ChildPage() {
             activeTab={middleTab}
             onChangeTab={setMiddleTab}
             onSelectTopic={setSelectedTopicId}
+            onOpenCurriculum={() => setMobileView('curriculum')}
             layoutMode={layoutMode}
             onToggleExpand={() =>
               setLayoutMode(layoutMode === 'expanded' ? 'standard' : 'expanded')
@@ -261,16 +310,18 @@ export default function ChildPage() {
         {/* ========================================================================= */}
         {/* RIGHT COLUMN: AI Co-Pilot, Tutor, Insights & Mastery Operations           */}
         {/* ========================================================================= */}
-        {layoutMode === 'standard' && (
-          <div className="space-y-4 lg:col-span-12 xl:col-span-4">
-            <RightAICompanionHub
-              childId={id}
-              selectedTopicId={selectedTopicId}
-              activeTab={rightTab}
-              onChangeTab={setRightTab}
-            />
-          </div>
-        )}
+        <div
+          className={`space-y-4 ${
+            layoutMode === 'standard' ? 'lg:col-span-12 xl:col-span-4' : 'hidden'
+          } ${mobileView === 'hub' ? 'block' : 'hidden lg:block'}`}
+        >
+          <RightAICompanionHub
+            childId={id}
+            selectedTopicId={selectedTopicId}
+            activeTab={rightTab}
+            onChangeTab={setRightTab}
+          />
+        </div>
       </div>
     </AppLayout>
   );
@@ -774,6 +825,7 @@ interface MiddleTopicStudioProps {
   activeTab: 'materials' | 'lessons' | 'flashcards' | 'study-guide';
   onChangeTab: (tab: 'materials' | 'lessons' | 'flashcards' | 'study-guide') => void;
   onSelectTopic: (id: number | null) => void;
+  onOpenCurriculum?: () => void;
   layoutMode?: 'standard' | 'expanded' | 'focus';
   onToggleExpand?: () => void;
   onToggleFocus?: () => void;
@@ -786,6 +838,7 @@ function MiddleTopicStudio({
   activeTab,
   onChangeTab,
   onSelectTopic,
+  onOpenCurriculum,
   layoutMode = 'standard',
   onToggleExpand,
   onToggleFocus,
@@ -864,14 +917,23 @@ function MiddleTopicStudio({
 
   if (!selectedTopicId) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-100 bg-white p-12 text-center shadow-soft-xl min-h-[460px]">
+      <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-100 bg-white p-8 sm:p-12 text-center shadow-soft-xl min-h-[420px]">
         <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tl from-purple-700 to-pink-500 text-white shadow-soft-md mb-4">
           <Compass className="h-7 w-7" />
         </div>
-        <h2 className="text-base font-bold text-slate-800">Select a Topic from the Left Panel</h2>
+        <h2 className="text-base font-bold text-slate-800">Select a Topic to Open Studio</h2>
         <p className="text-xs text-slate-400 mt-1 max-w-sm">
-          Browse through course units on the left to review reading materials, generate interactive AI lessons, and practice spaced flashcards.
+          Browse through course units and chapters to review reading materials, generate interactive AI lessons, practice spaced flashcards, and inspect study guides.
         </p>
+        {onOpenCurriculum && (
+          <button
+            onClick={onOpenCurriculum}
+            className="mt-5 inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white shadow-soft-xs hover:bg-slate-800 lg:hidden"
+          >
+            <BookOpen className="h-4 w-4" />
+            <span>Browse Curriculum Units</span>
+          </button>
+        )}
       </div>
     );
   }
@@ -879,10 +941,19 @@ function MiddleTopicStudio({
   return (
     <div className="space-y-4">
       {/* Topic Top Banner Card */}
-      <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-soft-xl">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="rounded-2xl border border-slate-100 bg-white p-4 sm:p-5 shadow-soft-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 text-xs text-slate-400 mb-1">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 mb-1">
+              {onOpenCurriculum && (
+                <button
+                  onClick={onOpenCurriculum}
+                  className="lg:hidden inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-700 hover:bg-slate-200"
+                >
+                  <BookOpen className="h-3 w-3" />
+                  <span>Units</span>
+                </button>
+              )}
               {activeSubject && (
                 <span
                   className="rounded-md px-2 py-0.5 text-[10px] font-bold text-white"
@@ -902,13 +973,13 @@ function MiddleTopicStudio({
                   e.preventDefault();
                   updateTopic.mutate();
                 }}
-                className="flex items-center gap-2 mt-1"
+                className="flex flex-wrap items-center gap-2 mt-1"
               >
                 <input
                   required
                   value={editTitle}
                   onChange={(e) => setEditTitle(e.target.value)}
-                  className="flex-1 rounded-lg border border-slate-200 p-1.5 text-sm font-bold text-slate-800 focus:outline-none"
+                  className="flex-1 min-w-[140px] rounded-lg border border-slate-200 p-1.5 text-sm font-bold text-slate-800 focus:outline-none"
                 />
                 <input
                   type="number"
@@ -938,7 +1009,7 @@ function MiddleTopicStudio({
                 <h1 className="text-base font-bold text-slate-800 truncate">{topic?.title}</h1>
                 <button
                   onClick={() => setIsEditingTitle(true)}
-                  className="text-slate-400 hover:text-slate-600 p-1"
+                  className="text-slate-400 hover:text-slate-600 p-1 shrink-0"
                   title="Rename Topic"
                 >
                   <Edit2 className="h-3.5 w-3.5" />
@@ -947,7 +1018,7 @@ function MiddleTopicStudio({
                   onClick={() => {
                     if (confirm(`Delete topic "${topic?.title}"?`)) deleteTopic.mutate();
                   }}
-                  className="text-slate-400 hover:text-red-600 p-1"
+                  className="text-slate-400 hover:text-red-600 p-1 shrink-0"
                   title="Delete Topic"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -957,36 +1028,38 @@ function MiddleTopicStudio({
           </div>
 
           {/* Quick Actions and Layout Controls */}
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => setShowWorksheetModal(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-purple-200 bg-purple-50/80 px-3 py-1.5 text-xs font-bold text-purple-700 hover:bg-purple-100 hover:border-purple-300 shadow-soft-xs transition-all"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-purple-200 bg-purple-50/80 px-2.5 py-1.5 text-xs font-bold text-purple-700 hover:bg-purple-100 hover:border-purple-300 shadow-soft-xs transition-all"
               title="Generate printable practice worksheet with math preservation"
             >
               <Printer className="h-3.5 w-3.5" />
-              <span>Print Worksheet</span>
+              <span>Worksheet</span>
             </button>
 
-            <input
-              type="date"
-              value={scheduleDate}
-              onChange={(e) => setScheduleDate(e.target.value)}
-              className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-700 focus:outline-none"
-            />
-            <button
-              onClick={() => addToSchedule.mutate()}
-              disabled={addToSchedule.isPending}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-tl from-purple-700 to-pink-500 px-3.5 py-1.5 text-xs font-bold text-white shadow-soft-xs hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
-            >
-              <Calendar className="h-3.5 w-3.5" />
-              <span>{scheduleSuccess ? 'Scheduled ✓' : 'Add to Plan'}</span>
-            </button>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="date"
+                value={scheduleDate}
+                onChange={(e) => setScheduleDate(e.target.value)}
+                className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs font-medium text-slate-700 focus:outline-none max-w-[130px]"
+              />
+              <button
+                onClick={() => addToSchedule.mutate()}
+                disabled={addToSchedule.isPending}
+                className="inline-flex items-center gap-1 rounded-xl bg-gradient-to-tl from-purple-700 to-pink-500 px-2.5 py-1.5 text-xs font-bold text-white shadow-soft-xs hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 shrink-0"
+              >
+                <Calendar className="h-3.5 w-3.5" />
+                <span>{scheduleSuccess ? 'Scheduled ✓' : 'Plan'}</span>
+              </button>
+            </div>
 
             {onToggleExpand && (
               <button
                 onClick={onToggleExpand}
-                className="rounded-xl border border-slate-200 bg-slate-50 p-2 text-slate-600 hover:bg-slate-100 transition-colors"
+                className="hidden lg:flex rounded-xl border border-slate-200 bg-slate-50 p-2 text-slate-600 hover:bg-slate-100 transition-colors"
                 title={layoutMode === 'expanded' ? 'Collapse to 3 columns' : 'Expand studio width'}
               >
                 {layoutMode === 'expanded' ? <Minimize2 className="h-4 w-4" /> : <Columns className="h-4 w-4" />}
@@ -996,7 +1069,7 @@ function MiddleTopicStudio({
             {onToggleFocus && (
               <button
                 onClick={onToggleFocus}
-                className="rounded-xl border border-slate-200 bg-slate-50 p-2 text-slate-600 hover:bg-slate-100 transition-colors"
+                className="hidden lg:flex rounded-xl border border-slate-200 bg-slate-50 p-2 text-slate-600 hover:bg-slate-100 transition-colors"
                 title={layoutMode === 'focus' ? 'Exit full screen' : 'Full width reading focus'}
               >
                 <Maximize2 className="h-4 w-4" />
@@ -1005,11 +1078,11 @@ function MiddleTopicStudio({
           </div>
         </div>
 
-        {/* Tab Switcher */}
-        <div className="mt-4 flex items-center gap-2 border-t border-slate-100 pt-3">
+        {/* Tab Switcher - Smooth horizontal scrolling on mobile */}
+        <div className="mt-4 flex items-center gap-2 border-t border-slate-100 pt-3 overflow-x-auto no-scrollbar flex-nowrap">
           <button
             onClick={() => onChangeTab('materials')}
-            className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
+            className={`shrink-0 flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
               activeTab === 'materials'
                 ? 'bg-slate-800 text-white shadow-soft-xs'
                 : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
@@ -1020,7 +1093,7 @@ function MiddleTopicStudio({
           </button>
           <button
             onClick={() => onChangeTab('lessons')}
-            className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
+            className={`shrink-0 flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
               activeTab === 'lessons'
                 ? 'bg-slate-800 text-white shadow-soft-xs'
                 : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
@@ -1031,7 +1104,7 @@ function MiddleTopicStudio({
           </button>
           <button
             onClick={() => onChangeTab('flashcards')}
-            className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
+            className={`shrink-0 flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
               activeTab === 'flashcards'
                 ? 'bg-slate-800 text-white shadow-soft-xs'
                 : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
@@ -1042,7 +1115,7 @@ function MiddleTopicStudio({
           </button>
           <button
             onClick={() => onChangeTab('study-guide')}
-            className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
+            className={`shrink-0 flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
               activeTab === 'study-guide'
                 ? 'bg-slate-800 text-white shadow-soft-xs'
                 : 'bg-slate-50 text-slate-600 hover:bg-slate-100'

@@ -101,15 +101,15 @@ export function ChildNavHeader({ childId, activeTab }: ChildNavHeaderProps) {
   return (
     <div className="mb-6 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-soft-xl">
       {/* Header Bar */}
-      <div className="flex flex-col gap-4 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-100 p-4 sm:px-6">
+        <div className="flex items-center gap-3 min-w-0">
           {/* Avatar with gradient */}
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tl from-purple-700 to-pink-500 text-lg font-bold text-white shadow-soft-md">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tl from-purple-700 to-pink-500 text-base font-bold text-white shadow-soft-md">
             {activeChild?.name ? activeChild.name.charAt(0).toUpperCase() : 'C'}
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-lg font-bold text-slate-800">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-base sm:text-lg font-bold text-slate-800 truncate">
                 {activeChild?.name ?? `Child #${childId}`}
               </h2>
               {activeChild?.grade && (
@@ -122,7 +122,7 @@ export function ChildNavHeader({ childId, activeTab }: ChildNavHeaderProps) {
               {childrenQuery.data && childrenQuery.data.length > 1 && (
                 <div className="relative group">
                   <button className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-slate-400 hover:bg-slate-100 hover:text-slate-700">
-                    <span>Switch child</span>
+                    <span>Switch</span>
                     <ChevronDown className="h-3 w-3" />
                   </button>
                   <div className="invisible absolute left-0 top-full z-20 mt-1 w-44 rounded-xl border border-slate-100 bg-white py-1.5 shadow-soft-xl opacity-0 transition-all group-hover:visible group-hover:opacity-100">
@@ -145,17 +145,17 @@ export function ChildNavHeader({ childId, activeTab }: ChildNavHeaderProps) {
                 </div>
               )}
             </div>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-400 truncate">
               Personalized Homeschool Learning Hub
             </p>
           </div>
         </div>
 
         {/* Quick Kids Mode Launcher Button */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0 self-stretch sm:self-auto justify-end">
           <button
             onClick={() => setKidsModalOpen(true)}
-            className="flex items-center gap-2 rounded-xl bg-gradient-to-tl from-amber-500 to-orange-400 px-4 py-2 text-xs font-bold text-white shadow-soft-md transition-all hover:scale-[1.02] active:scale-[0.98]"
+            className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-tl from-amber-500 to-orange-400 px-3.5 py-2 text-xs font-bold text-white shadow-soft-md transition-all hover:scale-[1.02] active:scale-[0.98] w-full sm:w-auto"
           >
             <Play className="h-3.5 w-3.5 fill-current" />
             <span>Launch Kids Mode</span>
@@ -164,7 +164,7 @@ export function ChildNavHeader({ childId, activeTab }: ChildNavHeaderProps) {
       </div>
 
       {/* Navigation Pills */}
-      <div className="flex overflow-x-auto px-4 py-2.5 sm:px-6 scrollbar-none">
+      <div className="flex overflow-x-auto px-4 py-2.5 sm:px-6 no-scrollbar">
         <nav className="flex space-x-1.5">
           {tabs.map((tab) => {
             const Icon = tab.icon;

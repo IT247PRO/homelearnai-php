@@ -59,22 +59,22 @@ export default function KidsStudyGuidePage() {
 
   const header = (
     <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200 shadow-soft-xs">
-      <div className="mx-auto max-w-5xl px-4 py-3 flex items-center justify-between gap-4">
+      <div className="mx-auto max-w-5xl px-4 py-3 flex items-center justify-between gap-3">
         <Link
           to="/kids"
-          className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-all"
+          className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-all shrink-0"
         >
           <ArrowLeft className="h-4 w-4" />
-          <span>Back to Storybook</span>
+          <span>Back</span>
         </Link>
-        <div className="text-center truncate">
+        <div className="text-center truncate min-w-0">
           <h1 className="text-sm font-black text-slate-900 flex items-center justify-center gap-1.5 truncate">
             <BookOpen className="h-4 w-4 text-indigo-600 shrink-0" />
             <span className="truncate">Study Guide</span>
           </h1>
-          <p className="text-[11px] font-semibold text-slate-500">Everything you need to know about this topic</p>
+          <p className="hidden sm:block text-[11px] font-semibold text-slate-500 truncate">Everything you need to know about this topic</p>
         </div>
-        <div className="w-24" />
+        <div className="w-12 sm:w-20" />
       </div>
     </header>
   );

@@ -46,34 +46,35 @@ export default function KidsLessonPage() {
     <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* Top Header Bar */}
       <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200 shadow-soft-xs">
-        <div className="mx-auto max-w-5xl px-4 py-3 flex items-center justify-between gap-4">
+        <div className="mx-auto max-w-5xl px-3 sm:px-4 py-3 flex items-center justify-between gap-2 sm:gap-4">
           <Link
             to="/kids"
-            className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-all"
+            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-2.5 sm:px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-all shrink-0"
           >
             <ArrowLeft className="h-4 w-4" />
-            <span>Back to Storybook</span>
+            <span className="hidden sm:inline">Back to Storybook</span>
+            <span className="sm:hidden">Back</span>
           </Link>
 
-          <div className="text-center truncate">
-            <h1 className="text-sm font-black text-slate-900 flex items-center justify-center gap-1.5 truncate">
-              <Sparkles className="h-4 w-4 text-purple-600 shrink-0" />
+          <div className="text-center truncate min-w-0">
+            <h1 className="text-xs sm:text-sm font-black text-slate-900 flex items-center justify-center gap-1.5 truncate">
+              <Sparkles className="h-3.5 sm:h-4 w-3.5 sm:w-4 text-purple-600 shrink-0" />
               <span className="truncate">{lessonQuery.data?.title ?? 'Lesson Exploration'}</span>
             </h1>
-            <p className="text-[11px] font-semibold text-slate-500">
+            <p className="hidden sm:block text-[11px] font-semibold text-slate-500 truncate">
               Interactive Lesson Chapter
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 rounded-full bg-purple-50 px-3 py-1.5 border border-purple-200/60 shadow-soft-xs">
-              <Star className="h-4 w-4 text-amber-500 fill-amber-400" />
-              <span className="text-xs font-black text-purple-900">+20 XP</span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <div className="flex items-center gap-1 sm:gap-1.5 rounded-full bg-purple-50 px-2.5 sm:px-3 py-1 sm:py-1.5 border border-purple-200/60 shadow-soft-xs">
+              <Star className="h-3.5 w-3.5 text-amber-500 fill-amber-400" />
+              <span className="text-[11px] sm:text-xs font-black text-purple-900">+20 XP</span>
             </div>
 
             {gamificationQuery.data?.currentStreakDays !== undefined && (
-              <div className="hidden sm:flex items-center gap-1.5 rounded-full bg-orange-50 px-3 py-1.5 border border-orange-200/60">
-                <Flame className="h-4 w-4 text-orange-500 fill-orange-400" />
+              <div className="hidden md:flex items-center gap-1.5 rounded-full bg-orange-50 px-2.5 py-1 border border-orange-200/60">
+                <Flame className="h-3.5 w-3.5 text-orange-500 fill-orange-400" />
                 <span className="text-xs font-black text-orange-900">{gamificationQuery.data.currentStreakDays}d</span>
               </div>
             )}
