@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useMutation } from '@tanstack/react-query';
 import {
   Printer,
@@ -109,6 +110,15 @@ export function WorksheetModal({
   if (!isOpen) return null;
 
   const handlePrint = () => {
+    // Toggled class drives the @media print rule in index.css that hides everything outside
+    // #worksheet-modal-container — the modal's own print:hidden/print:* Tailwind variants only
+    // reach elements inside it, not the rest of the page sitting behind this overlay.
+    document.body.classList.add('printing-worksheet');
+    const cleanup = () => {
+      document.body.classList.remove('printing-worksheet');
+      window.removeEventListener('afterprint', cleanup);
+    };
+    window.addEventListener('afterprint', cleanup);
     window.print();
   };
 
@@ -119,7 +129,7 @@ export function WorksheetModal({
     setCheckedAnswers((prev) => ({ ...prev, [problemNumber]: isMatch }));
   };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/60 p-3 sm:p-6 backdrop-blur-sm print:static print:p-0 print:bg-white">
       {/* Modal Container */}
       <div
@@ -652,6 +662,7 @@ export function WorksheetModal({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

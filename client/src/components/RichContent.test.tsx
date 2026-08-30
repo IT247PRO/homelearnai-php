@@ -30,4 +30,18 @@ describe('RichContent', () => {
     expect(container.querySelector('script')).toBeNull();
     expect((window as unknown as { __pwned?: boolean }).__pwned).toBeUndefined();
   });
+
+  it('defaults to the fixed prose-sm size with no inline font-size (unchanged for existing consumers)', () => {
+    const { container } = render(<RichContent content={'text'} />);
+    const root = container.firstElementChild as HTMLElement;
+    expect(root.className).toContain('prose-sm');
+    expect(root.style.fontSize).toBe('');
+  });
+
+  it('scalable renders with a CSS-variable-driven font-size and drops the fixed prose-sm class', () => {
+    const { container } = render(<RichContent content={'text'} scalable />);
+    const root = container.firstElementChild as HTMLElement;
+    expect(root.className).not.toContain('prose-sm');
+    expect(root.style.fontSize).toBe('calc(1em * var(--reader-font-scale, 1))');
+  });
 });

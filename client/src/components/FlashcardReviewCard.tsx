@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Volume2, VolumeX, Sparkles, Eye, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { RichContent } from './RichContent';
+import { useReadAloud } from '../hooks/useReadAloud';
 
 export type ReviewResult = 'again' | 'hard' | 'good' | 'easy';
 
@@ -42,26 +43,17 @@ export function FlashcardReviewCard({ topicTitle, flashcard, onSubmit, submittin
   const [clozeAnswer, setClozeAnswer] = useState('');
   const [answered, setAnswered] = useState(false);
   const [revealed, setRevealed] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
 
   const checkable = isCheckable(flashcard.cardType);
 
+  const { status: speechStatus, speak, stop: stopSpeech } = useReadAloud({ rate: 0.95, pitch: 1.05 });
+  const isSpeaking = speechStatus === 'speaking';
   const handleSpeak = (text: string) => {
-    if (!('speechSynthesis' in window)) return;
     if (isSpeaking) {
-      window.speechSynthesis.cancel();
-      setIsSpeaking(false);
+      stopSpeech();
       return;
     }
-    window.speechSynthesis.cancel();
-    const cleanText = text.replace(/<[^>]*>?/gm, '').replace(/[*_#`]/g, '');
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.rate = 0.95;
-    utterance.pitch = 1.05;
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
-    setIsSpeaking(true);
-    window.speechSynthesis.speak(utterance);
+    speak(text);
   };
 
   function currentResponse(): unknown {
@@ -78,8 +70,7 @@ export function FlashcardReviewCard({ topicTitle, flashcard, onSubmit, submittin
     setClozeAnswer('');
     setAnswered(false);
     setRevealed(false);
-    window.speechSynthesis?.cancel();
-    setIsSpeaking(false);
+    stopSpeech();
   }
 
   function handleSubmitAnswer(e: React.FormEvent) {

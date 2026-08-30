@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -9,8 +9,6 @@ import {
   Flame,
   CheckCircle2,
   Play,
-  Volume2,
-  VolumeX,
   Search,
   ChevronRight,
   ChevronLeft,
@@ -32,6 +30,9 @@ import {
 import { api, apiErrorBody } from '../lib/api';
 import { RichContent } from '../components/RichContent';
 import { TutorChat } from '../components/TutorChat';
+import { ReadAloudControls } from '../components/ReadAloudControls';
+import { TextSizeControls } from '../components/TextSizeControls';
+import { TextSizeProvider } from '../contexts/TextSizeContext';
 
 /* ======================================================================================= */
 /* TYPE DEFINITIONS                                                                        */
@@ -157,14 +158,11 @@ export default function KidsHomePage() {
   const [selectedTopicId, setSelectedTopicId] = useState<number | null>(null);
   const [tocSearch, setTocSearch] = useState('');
   const [expandedUnits, setExpandedUnits] = useState<Record<number, boolean>>({});
-  const [fontSize, setFontSize] = useState<'normal' | 'large' | 'huge'>('large');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isCompanionOpen, setIsCompanionOpen] = useState(true);
 
-  // Audio Speech Reader State
-  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  // Read-aloud speed (shared control below hands the actual speech control to useReadAloud)
   const [speechRate, setSpeechRate] = useState<number>(1.0);
-  const speechRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   // Interactive Inline Flashcard Deck State
   const [activeCardIndex, setActiveCardIndex] = useState(0);
@@ -290,56 +288,9 @@ export default function KidsHomePage() {
   useEffect(() => {
     setActiveCardIndex(0);
     setIsCardFlipped(false);
-    // Stop audio narration when changing topics
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      setIsPlayingAudio(false);
-    }
+    // Read Aloud narration is stopped on topic change via ReadAloudControls being remounted
+    // (keyed on the topic id below), which triggers useReadAloud's unmount cleanup.
   }, [selectedTopicId]);
-
-  // Audio Speech Narration handler
-  const handleToggleAudio = () => {
-    if (!('speechSynthesis' in window)) {
-      alert('Text-to-speech audio is not supported in this browser.');
-      return;
-    }
-
-    if (isPlayingAudio) {
-      window.speechSynthesis.cancel();
-      setIsPlayingAudio(false);
-      return;
-    }
-
-    if (!currentChapter?.topic.learningContent) return;
-
-    // Strip HTML tags for clean narration
-    const plainText = `${currentChapter.topic.title}. ${currentChapter.topic.learningContent.replace(/<[^>]*>?/gm, ' ')}`;
-    const utterance = new SpeechSynthesisUtterance(plainText);
-    utterance.rate = speechRate;
-    utterance.pitch = 1.05; // Slightly friendly, warmer tone for kids
-
-    utterance.onend = () => {
-      setIsPlayingAudio(false);
-    };
-    utterance.onerror = () => {
-      setIsPlayingAudio(false);
-    };
-
-    speechRef.current = utterance;
-    window.speechSynthesis.speak(utterance);
-    setIsPlayingAudio(true);
-  };
-
-  const handleRateChange = (newRate: number) => {
-    setSpeechRate(newRate);
-    if (isPlayingAudio && speechRef.current) {
-      window.speechSynthesis.cancel();
-      setIsPlayingAudio(false);
-      setTimeout(() => {
-        handleToggleAudio();
-      }, 100);
-    }
-  };
 
   const toggleUnitAccordion = (unitId: number) => {
     setExpandedUnits((prev) => ({
@@ -775,6 +726,7 @@ export default function KidsHomePage() {
           {/* --------------------------------------------------------------------- */}
           <main className="flex-1 overflow-y-auto p-4 sm:p-8 lg:p-10 h-[calc(100vh-4rem)]">
             {currentChapter ? (
+              <TextSizeProvider>
               <div className="max-w-4xl mx-auto space-y-8 pb-20">
                 {/* 1. Breadcrumb & Chapter Hierarchy */}
                 <nav className="flex items-center gap-2 text-xs font-semibold text-slate-400">
@@ -825,24 +777,18 @@ export default function KidsHomePage() {
                   {/* Audio Read-Aloud Narration Toolbar */}
                   <div className="mt-6 flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-100">
                     <div className="flex items-center gap-2">
-                      <button
-                        onClick={handleToggleAudio}
-                        className={`flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-bold transition-all shadow-soft-xs ${
-                          isPlayingAudio
-                            ? 'bg-purple-600 text-white animate-pulse'
-                            : 'bg-purple-50 text-purple-700 hover:bg-purple-100'
-                        }`}
-                      >
-                        {isPlayingAudio ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-                        <span>{isPlayingAudio ? 'Pause Narration' : 'Read Aloud to Me 🎧'}</span>
-                      </button>
+                      <ReadAloudControls
+                        key={currentChapter.topic.id}
+                        text={`${currentChapter.topic.title}. ${currentChapter.topic.learningContent ?? ''}`}
+                        rate={speechRate}
+                      />
 
                       {/* Speed selector */}
                       <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-0.5">
                         {[0.8, 1.0, 1.2].map((rate) => (
                           <button
                             key={rate}
-                            onClick={() => handleRateChange(rate)}
+                            onClick={() => setSpeechRate(rate)}
                             className={`rounded-lg px-2 py-1 text-[10px] font-bold transition-all ${
                               speechRate === rate
                                 ? 'bg-white text-purple-700 shadow-soft-xs'
@@ -855,52 +801,15 @@ export default function KidsHomePage() {
                       </div>
                     </div>
 
-                    {/* Font Size Comfort Controls */}
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase">Text Size:</span>
-                      <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-0.5">
-                        <button
-                          onClick={() => setFontSize('normal')}
-                          className={`rounded-lg px-2.5 py-1 text-xs font-bold ${
-                            fontSize === 'normal' ? 'bg-white text-purple-700 shadow-soft-xs' : 'text-slate-500'
-                          }`}
-                        >
-                          A
-                        </button>
-                        <button
-                          onClick={() => setFontSize('large')}
-                          className={`rounded-lg px-2.5 py-1 text-sm font-bold ${
-                            fontSize === 'large' ? 'bg-white text-purple-700 shadow-soft-xs' : 'text-slate-500'
-                          }`}
-                        >
-                          A+
-                        </button>
-                        <button
-                          onClick={() => setFontSize('huge')}
-                          className={`rounded-lg px-2.5 py-1 text-base font-bold ${
-                            fontSize === 'huge' ? 'bg-white text-purple-700 shadow-soft-xs' : 'text-slate-500'
-                          }`}
-                        >
-                          A++
-                        </button>
-                      </div>
-                    </div>
+                    <TextSizeControls />
                   </div>
                 </div>
 
                 {/* 3. Main Story & Concept Reading Content (Illustrated & Formatted) */}
-                <article
-                  className={`rounded-3xl border border-slate-100 bg-white p-6 sm:p-10 shadow-soft-sm leading-relaxed transition-all ${
-                    fontSize === 'normal'
-                      ? 'text-sm'
-                      : fontSize === 'large'
-                      ? 'text-base font-medium'
-                      : 'text-lg font-medium leading-loose'
-                  }`}
-                >
+                <article className="rounded-3xl border border-slate-100 bg-white p-6 sm:p-10 shadow-soft-sm leading-relaxed">
                   {currentChapter.topic.learningContent ? (
                     <div className="prose prose-purple max-w-none text-slate-800 space-y-6">
-                      <RichContent content={currentChapter.topic.learningContent} />
+                      <RichContent content={currentChapter.topic.learningContent} scalable />
                     </div>
                   ) : (
                     <div className="py-8 text-center text-slate-400 space-y-2">
@@ -1094,6 +1003,7 @@ export default function KidsHomePage() {
                   )}
                 </div>
               </div>
+              </TextSizeProvider>
             ) : (
               <div className="py-20 text-center text-slate-400">
                 <BookOpen className="h-12 w-12 mx-auto text-slate-300 mb-3" />

@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { RichContent } from '../components/RichContent';
+import { useReadAloud } from '../hooks/useReadAloud';
 
 interface Question {
   id: number;
@@ -56,7 +57,6 @@ export default function KidsAssessmentPage() {
   const [result, setResult] = useState<{ score: number | null } | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [viewMode, setViewMode] = useState<'step' | 'all'>('step');
-  const [isSpeaking, setIsSpeaking] = useState(false);
   const [showExitDialog, setShowExitDialog] = useState(false);
 
   // Load Child Profile & Gamification for HUD
@@ -119,8 +119,7 @@ export default function KidsAssessmentPage() {
     },
     onSuccess: (data) => {
       setResult(data);
-      window.speechSynthesis?.cancel();
-      setIsSpeaking(false);
+      stopSpeech();
     },
   });
 
@@ -131,24 +130,15 @@ export default function KidsAssessmentPage() {
   const allAnswered = totalQuestions > 0 && answeredCount === totalQuestions;
   const progressPercent = totalQuestions > 0 ? (answeredCount / totalQuestions) * 100 : 0;
 
-  // Text-To-Speech Speech Handler
+  // Text-To-Speech Speech Handler (shared hook — real pause/resume, cancels on unmount)
+  const { status: speechStatus, speak, stop: stopSpeech } = useReadAloud({ rate: 0.95, pitch: 1.05 });
+  const isSpeaking = speechStatus === 'speaking';
   const toggleSpeech = (text: string) => {
-    if (!('speechSynthesis' in window)) return;
     if (isSpeaking) {
-      window.speechSynthesis.cancel();
-      setIsSpeaking(false);
+      stopSpeech();
       return;
     }
-    window.speechSynthesis.cancel();
-    // Clean markdown/html formatting for cleaner speech
-    const cleanText = text.replace(/<[^>]*>?/gm, '').replace(/[*_#`]/g, '');
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.rate = 0.95;
-    utterance.pitch = 1.05;
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
-    setIsSpeaking(true);
-    window.speechSynthesis.speak(utterance);
+    speak(text);
   };
 
   // Retake assessment handler
@@ -171,16 +161,14 @@ export default function KidsAssessmentPage() {
   const handleNext = () => {
     if (currentIndex < totalQuestions - 1) {
       setCurrentIndex((prev) => prev + 1);
-      window.speechSynthesis?.cancel();
-      setIsSpeaking(false);
+      stopSpeech();
     }
   };
 
   const handlePrev = () => {
     if (currentIndex > 0) {
       setCurrentIndex((prev) => prev - 1);
-      window.speechSynthesis?.cancel();
-      setIsSpeaking(false);
+      stopSpeech();
     }
   };
 

@@ -31,7 +31,7 @@ router.post('/topics/:topicId/worksheets/generate', requireAuth, async (req, res
       topicId,
       lessonId: payload.lessonId,
       childId: payload.childId,
-      userId: req.user!.id,
+      userId: req.userId!,
     });
 
     return res.json({ data: worksheet });
@@ -59,7 +59,7 @@ router.post('/lessons/:lessonId/worksheets/generate', requireAuth, async (req, r
       lessonId,
       topicId: payload.topicId,
       childId: payload.childId,
-      userId: req.user!.id,
+      userId: req.userId!,
     });
 
     return res.json({ data: worksheet });
@@ -82,7 +82,7 @@ router.post('/worksheets/generate', requireAuth, async (req, res, next) => {
       topicId: payload.topicId,
       lessonId: payload.lessonId,
       childId: payload.childId,
-      userId: req.user!.id,
+      userId: req.userId!,
     });
 
     return res.json({ data: worksheet });

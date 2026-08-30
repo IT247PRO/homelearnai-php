@@ -24,6 +24,20 @@
   }
 }
 
+/* WorksheetModal is rendered via a React portal directly into <body> (a sibling of #root, not
+   a descendant), specifically so printing can be scoped by simply hiding #root outright rather
+   than trying to selectively hide/reveal elements within it. (An earlier version used a
+   visibility:hidden/visible trick without a portal — that broke because visibility:hidden
+   preserves layout space, so the still-nested modal's position:absolute escape hatch anchored
+   to whatever positioned ancestor happened to exist on that page, printing blank pages before
+   the real content.) toggles `printing-worksheet` on <body> around window.print() — see
+   WorksheetModal's handlePrint. */
+@media print {
+  body.printing-worksheet #root {
+    display: none;
+  }
+}
+
 @layer utilities {
   .bg-gradient-soft-primary {
     background-image: linear-gradient(310deg, #7928ca 0%, #ff0080 100%);
